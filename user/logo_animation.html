@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ride Revive Detailing - Logo Animation</title>
+<style>
+  body {
+    margin: 0;
+    background: #121212;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+  }
+  .logo-container {
+    position: relative;
+    width: 400px;
+    height: 200px;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+  .logo-text {
+    font-weight: bold;
+    font-size: 48px;
+    fill: transparent;
+    stroke: white;
+    stroke-width: 2px;
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: drawText 2s forwards;
+    animation-fill-mode: forwards;
+  }
+  .logo-fill {
+    fill: white;
+    opacity: 0;
+    animation: fillText 1s forwards;
+    animation-delay: 2s;
+    animation-fill-mode: forwards;
+  }
+  .slash {
+    stroke: #ff0000;
+    stroke-width: 6;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+    animation: drawSlash 1s forwards;
+    animation-delay: 3.2s;
+    animation-fill-mode: forwards;
+  }
+  .tagline {
+    font-size: 18px;
+    fill: #ff0000;
+    opacity: 0;
+    animation: fadeInTagline 1s forwards;
+    animation-delay: 4.5s;
+    text-anchor: middle;
+    animation-fill-mode: forwards;
+  }
+
+  @keyframes drawText {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes fillText {
+    to {
+      opacity: 1;
+      fill: white;
+      stroke: none;
+    }
+  }
+  @keyframes drawSlash {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes fadeInTagline {
+    to {
+      opacity: 1;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="logo-container">
+    <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ride Revive Detailing Logo">
+      <!-- Car silhouette simplified for animation -->
+      <path d="M20 120 Q100 40 180 120 T340 120" stroke="#FFD700" stroke-width="4" fill="none" />
+      <!-- Logo text outline -->
+      <text x="50%" y="150" class="logo-text" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" letter-spacing="5">
+        RIDE REVIVE
+      </text>
+      <!-- Logo text fill -->
+      <text x="50%" y="150" class="logo-fill" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" letter-spacing="5">
+        RIDE REVIVE
+      </text>
+      <!-- Red slash -->
+      <line class="slash" x1="120" y1="100" x2="280" y2="180" />
+      <!-- Tagline -->
+      <text x="50%" y="190" class="tagline" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif">
+        The Shine of a New Beginning
+      </text>
+    </svg>
+  </div>
+</body>
+</html>

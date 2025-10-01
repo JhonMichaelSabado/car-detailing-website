@@ -1,0 +1,14 @@
+{
+    "name": "car-detailing/web-app",
+    "description": "Car Detailing Service Web Application",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "phpmailer/phpmailer": "^6.8"
+    },
+    "autoload": {
+        "psr-4": {
+            "CarDetailing\\": "src/"
+        }
+    }
+}

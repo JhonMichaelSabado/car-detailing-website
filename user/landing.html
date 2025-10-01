@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# article: http://ogp.me/ns/article#">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Ride Revive Detailing - The Beginning of a New Shine</title>
+<meta name="description" content="Premium car detailing services - The beginning of a new shine for your ride.">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="Ride Revive Detailing">
+<meta property="og:title" content="Ride Revive Detailing - The Beginning of a New Shine">
+<meta property="og:type" content="website">
+<meta property="og:description" content="Premium car detailing services - The beginning of a new shine for your ride.">
+<meta property="og:url" content="https://yourdomain.com/landing.html">
+<meta property="og:image" content="https://yourdomain.com/assets/img/logo-og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@riderevivedetailing">
+<meta name="twitter:title" content="Ride Revive Detailing - The Beginning of a New Shine">
+<meta name="twitter:description" content="Premium car detailing services - The beginning of a new shine for your ride.">
+<meta name="twitter:image" content="https://yourdomain.com/assets/img/logo-og.jpg">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body, html {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: #121212;
+    color: #e0e0e0;
+    font-family: 'Roboto', sans-serif;
+    overflow-x: hidden;
+  }
+  #fullWrap {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .logo-container {
+    position: relative;
+    width: 400px;
+    height: 200px;
+    margin-bottom: 20px;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+  .logo-text {
+    font-weight: 700;
+    font-size: 48px;
+    fill: transparent;
+    stroke: white;
+    stroke-width: 2px;
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: drawText 2s forwards;
+    animation-fill-mode: forwards;
+  }
+  .logo-fill {
+    fill: white;
+    opacity: 0;
+    animation: fillText 1s forwards;
+    animation-delay: 2s;
+    animation-fill-mode: forwards;
+  }
+  .slash {
+    stroke: #ff0000;
+    stroke-width: 6;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+    animation: drawSlash 1s forwards;
+    animation-delay: 3.2s;
+    animation-fill-mode: forwards;
+  }
+  .tagline {
+    font-size: 18px;
+    fill: #ff0000;
+    opacity: 0;
+    animation: fadeInTagline 1s forwards;
+    animation-delay: 4.5s;
+    text-anchor: middle;
+    animation-fill-mode: forwards;
+  }
+  .services {
+    margin-top: 40px;
+    max-width: 800px;
+    text-align: center;
+  }
+  .services h2 {
+    color: #FFD700;
+    font-size: 28px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .services-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+  }
+  .service-item {
+    background: #1a1a1a;
+    border: 2px solid #FFD700;
+    border-radius: 15px;
+    padding: 20px;
+    width: 220px;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+    transition: transform 0.3s ease;
+  }
+  .service-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+  }
+  .service-item h3 {
+    color: #FFD700;
+    margin-bottom: 10px;
+    font-size: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .service-item p {
+    color: #ccc;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  @keyframes drawText {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes fillText {
+    to {
+      opacity: 1;
+      fill: white;
+      stroke: none;
+    }
+  }
+  @keyframes drawSlash {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes fadeInTagline {
+    to {
+      opacity: 1;
+    }
+  }
+  @media (max-width: 768px) {
+    .services-list {
+      flex-direction: column;
+      align-items: center;
+    }
+    .service-item {
+      width: 90%;
+    }
+  }
+</style>
+</head>
+<body>
+  <div id="fullWrap">
+    <div class="logo-container" aria-label="Ride Revive Detailing Logo Animation" role="img">
+      <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <!-- Car silhouette -->
+        <path d="M20 120 Q100 40 180 120 T340 120" stroke="#FFD700" stroke-width="4" fill="none" />
+        <!-- Logo text outline -->
+        <text x="50%" y="150" class="logo-text" dominant-baseline="middle" text-anchor="middle" letter-spacing="5">
+          RIDE REVIVE
+        </text>
+        <!-- Logo text fill -->
+        <text x="50%" y="150" class="logo-fill" dominant-baseline="middle" text-anchor="middle" letter-spacing="5">
+          RIDE REVIVE
+        </text>
+        <!-- Red slash -->
+        <line class="slash" x1="120" y1="100" x2="280" y2="180" />
+        <!-- Tagline -->
+        <text x="50%" y="190" class="tagline" dominant-baseline="middle" text-anchor="middle">
+          The Beginning of a New Shine
+        </text>
+      </svg>
+    </div>
+    <section class="services" aria-label="Our Car Detailing Services">
+      <h2>Our Services</h2>
+      <div class="services-list">
+        <div class="service-item">
+          <h3>Exterior Detailing</h3>
+          <p>Complete cleaning, polishing, and protection of your vehicle's exterior surfaces.</p>
+        </div>
+        <div class="service-item">
+          <h3>Interior Detailing</h3>
+          <p>Deep cleaning and conditioning of seats, carpets, and interior surfaces.</p>
+        </div>
+        <div class="service-item">
+          <h3>Paint Correction</h3>
+          <p>Removing imperfections and restoring your vehicle's paint to a flawless finish.</p>
+        </div>
+        <div class="service-item">
+          <h3>Ceramic Coating</h3>
+          <p>Long-lasting protection with advanced ceramic coating technology.</p>
+        </div>
+        <div class="service-item">
+          <h3>Engine Bay Cleaning</h3>
+          <p>Thorough cleaning of your engine compartment for better performance and appearance.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+    // Simulate loading animation duration then redirect to dashboard
+    window.onload = function() {
+      setTimeout(function() {
+        window.location.href = 'dashboard.php';
+      }, 5000); // 5 seconds delay for loading animation
+    };
+  </script>
+</body>
+</html>
