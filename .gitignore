@@ -1,5 +1,6 @@
 # Ignore sensitive files
 config/database.php
+config/google_config.php
 .env
 *.log
 

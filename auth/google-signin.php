@@ -84,7 +84,8 @@ if (isset($_POST['action']) && $_POST['action'] == 'google_signup') {
 
     $user = json_decode($token_info, true);
 
-    if (!isset($user['aud']) || $user['aud'] !== '551906749283-ve45j56noq4bm7r14gda9ustc7kaqla1.apps.googleusercontent.com' || 
+    $google_config = require_once __DIR__ . '/../config/google_config.php';
+    if (!isset($user['aud']) || $user['aud'] !== $google_config['client_id'] || 
         !isset($user['email_verified']) || !$user['email_verified']) {
         echo json_encode(['success' => false, 'error' => 'Invalid or expired token']);
         exit();

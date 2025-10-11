@@ -2,9 +2,11 @@
 session_start();
 require_once __DIR__ . '/../config/database.php';
 
-$client_id = '551906749283-ve45j56noq4bm7r14gda9ustc7kaqla1.apps.googleusercontent.com';
-$client_secret = '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';
-$redirect_uri = 'http://127.0.0.1/car-detailing/auth/google-callback.php';
+// Load Google OAuth configuration
+$google_config = require_once __DIR__ . '/../config/google_config.php';
+$client_id = $google_config['client_id'];
+$client_secret = $google_config['client_secret'];
+$redirect_uri = $google_config['redirect_uri'];
 
 if (isset($_GET['code'])) {
     $code = $_GET['code'];
