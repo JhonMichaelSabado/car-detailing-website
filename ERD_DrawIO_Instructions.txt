@@ -1,0 +1,159 @@
+Car Detailing System ERD - Draw.io Instructions
+
+STEP 1: Go to https://app.diagrams.net/ (Draw.io)
+STEP 2: Create new diagram
+STEP 3: Use these elements:
+
+ENTITIES (Use Rectangle shapes):
+1. USERS
+2. SERVICES  
+3. BOOKINGS
+4. PAYMENTS
+5. REVIEWS
+6. NOTIFICATIONS
+7. ACTIVITY_LOGS
+8. PAYMENT_LOGS
+
+RELATIONSHIPS (Use Diamond shapes):
+1. MAKES (Users → Bookings)
+2. OFFERS (Services → Bookings)
+3. PAYS_FOR (Bookings → Payments)
+4. VERIFIES (Users → Payments)
+5. WRITES (Users → Reviews)
+6. CONCERNS (Services → Reviews)
+7. REVIEWS (Bookings → Reviews)
+8. RECEIVES (Users → Notifications)
+9. LOGS (Users → Activity_Logs)
+10. CREATES (Payments → Payment_Logs)
+
+CARDINALITY NOTATION:
+- Users to Bookings: 1:N
+- Services to Bookings: 1:N
+- Bookings to Payments: 1:N
+- Users to Payments: 1:N
+- Bookings to Reviews: 1:1
+- Users to Reviews: 1:N
+- Services to Reviews: 1:N
+- Users to Notifications: 1:N
+- Users to Activity_Logs: 1:N
+- Payments to Payment_Logs: 1:N
+
+ATTRIBUTES FOR EACH ENTITY:
+
+USERS:
+- id (PK)
+- google_id
+- username
+- email
+- password
+- first_name
+- last_name
+- phone
+- role
+- address
+- date_of_birth
+- profile_picture
+- email_verified
+- last_login
+- is_active
+- reset_token
+- reset_expires
+- created_at
+- updated_at
+
+SERVICES:
+- service_id (PK)
+- category
+- service_name
+- description
+- price_small
+- price_medium
+- price_large
+- duration_minutes
+- included_items
+- free_items
+- is_active
+- created_at
+
+BOOKINGS:
+- booking_id (PK)
+- user_id (FK)
+- service_id (FK)
+- vehicle_size
+- booking_date
+- status
+- total_amount
+- payment_status
+- payment_verification_status
+- vehicle_details
+- special_requests
+- admin_notes
+- created_at
+- updated_at
+
+PAYMENTS:
+- payment_id (PK)
+- booking_id (FK)
+- user_id (FK)
+- amount
+- payment_method
+- payment_status
+- payment_type
+- transaction_id
+- payment_proof_path
+- verification_status
+- verified_by (FK)
+- verified_at
+- rejection_reason
+- payment_date
+- notes
+
+REVIEWS:
+- review_id (PK)
+- user_id (FK)
+- booking_id (FK)
+- service_id (FK)
+- rating
+- review_text
+- is_approved
+- admin_response
+- created_at
+
+NOTIFICATIONS:
+- notification_id (PK)
+- user_id (FK)
+- type
+- title
+- message
+- is_read
+- related_id
+- action_url
+- created_at
+
+ACTIVITY_LOGS:
+- log_id (PK)
+- user_id (FK)
+- admin_id (FK)
+- action
+- description
+- table_name
+- record_id
+- ip_address
+- created_at
+
+PAYMENT_LOGS:
+- log_id (PK)
+- payment_id (FK)
+- action
+- performed_by (FK)
+- details
+- created_at
+
+FORMATTING TIPS:
+1. Use yellow rectangles for entities
+2. Use blue diamonds for relationships
+3. Use green ovals for attributes
+4. Underline primary keys
+5. Use dashed underlines for foreign keys
+6. Add 1, N, M symbols at line ends
+7. Use connecting lines to show relationships

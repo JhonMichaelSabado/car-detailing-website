@@ -56,7 +56,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'save_name') {
         $_SESSION['role'] = 'user';
         $_SESSION['name'] = $full_name;
         unset($_SESSION['google_temp']);
-        echo json_encode(['success' => true, 'redirect' => '../user/dashboard.php']);
+        echo json_encode(['success' => true, 'redirect' => '../user/dashboard_CLEAN.php']);
     } else {
         echo json_encode(['success' => false, 'error' => 'Registration failed']);
     }
@@ -113,7 +113,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'google_signup') {
         $_SESSION['username'] = $row['username'];
         $_SESSION['role'] = $row['role'] ?? 'user';
         $_SESSION['name'] = trim($row['first_name'] . ' ' . $row['last_name']);
-        $redirect = ($row['role'] == 'admin') ? '../admin/dashboard.php' : '../user/dashboard.php';
+        $redirect = ($row['role'] == 'admin') ? '../admin/dashboard.php' : '../user/dashboard_CLEAN.php';
     } else {
         // Store Google data temporarily for name entry
         $_SESSION['google_temp'] = [

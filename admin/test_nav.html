@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .nav-link { display: block; padding: 10px; margin: 5px 0; background: #333; color: white; text-decoration: none; border-radius: 5px; }
+        .nav-link:hover { background: #555; }
+        .content-section { display: none; padding: 20px; border: 1px solid #ccc; margin: 20px 0; }
+        .content-section.active { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Admin Dashboard Navigation Test</h1>
+    
+    <nav>
+        <a href="#" class="nav-link active" onclick="showSection('dashboard', this)">Dashboard</a>
+        <a href="#" class="nav-link" onclick="showSection('bookings', this)">Bookings</a>
+        <a href="#" class="nav-link" onclick="showSection('users', this)">Users</a>
+    </nav>
+    
+    <div class="content">
+        <section id="dashboard" class="content-section active">
+            <h2>Dashboard Content</h2>
+            <p>This is the dashboard section.</p>
+        </section>
+        
+        <section id="bookings" class="content-section">
+            <h2>Bookings Content</h2>
+            <p>This is the bookings section.</p>
+        </section>
+        
+        <section id="users" class="content-section">
+            <h2>Users Content</h2>
+            <p>This is the users section.</p>
+        </section>
+    </div>
+    
+    <script>
+        function showSection(sectionId, linkEl) {
+            console.log('showSection called with:', sectionId, linkEl);
+            
+            // Hide all sections
+            const sections = document.querySelectorAll('.content-section');
+            sections.forEach(section => section.classList.remove('active'));
+            
+            // Show target section
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+            }
+            
+            // Update nav links
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => link.classList.remove('active'));
+            
+            if (linkEl) {
+                linkEl.classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>

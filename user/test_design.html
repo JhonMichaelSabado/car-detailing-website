@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Card Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .service-card {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            border: 2px solid #333;
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            position: relative;
+            height: 320px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .service-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+            transition: left 0.6s ease;
+            z-index: 1;
+        }
+
+        .service-card:hover::before {
+            left: 100%;
+        }
+
+        .service-card:hover {
+            border-color: #FFD700;
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.3);
+        }
+
+        .service-card.selected {
+            border-color: #FFD700;
+            background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+            transform: translateY(-5px);
+        }
+
+        .service-card-header {
+            position: relative;
+            height: 160px;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .service-card-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(26,26,26,0.8) 0%, rgba(45,45,45,0.6) 100%);
+            z-index: 1;
+        }
+
+        .service-icon {
+            font-size: 4rem;
+            z-index: 2;
+            position: relative;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+
+        .service-card-body {
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+        }
+
+        .service-card h3 {
+            color: #FFD700;
+            margin: 0 0 10px 0;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .service-card p {
+            color: #ccc;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            margin: 0 0 15px 0;
+            flex: 1;
+        }
+
+        .service-pricing {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .price-item {
+            text-align: center;
+            padding: 8px 6px;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            flex: 1;
+            transition: all 0.3s ease;
+        }
+
+        .price-item:hover {
+            background: rgba(255, 215, 0, 0.2);
+            border-color: rgba(255, 215, 0, 0.4);
+        }
+
+        .price-item .size {
+            font-size: 0.75rem;
+            color: #FFD700;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .price-item .price {
+            font-weight: bold;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .service-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 215, 0, 0.9);
+            color: #1a1a1a;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            z-index: 3;
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚗 New Service Card Design</h1>
+    
+    <div class="services-grid">
+        <div class="service-card">
+            <div class="service-card-header">
+                <div class="service-icon">🪟</div>
+                <div class="service-badge">Premium</div>
+            </div>
+            
+            <div class="service-card-body">
+                <h3>Interior Cleaning</h3>
+                <p>Complete interior detailing including vacuuming, dashboard cleaning, and fabric protection.</p>
+                
+                <div class="service-pricing">
+                    <div class="price-item">
+                        <div class="size">Small</div>
+                        <div class="price">₱1,500</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Medium</div>
+                        <div class="price">₱2,000</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Large</div>
+                        <div class="price">₱2,500</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="service-card">
+            <div class="service-card-header">
+                <div class="service-icon">🚗</div>
+                <div class="service-badge">Premium</div>
+            </div>
+            
+            <div class="service-card-body">
+                <h3>Exterior Wash</h3>
+                <p>Professional exterior wash with premium soap and protective wax coating.</p>
+                
+                <div class="service-pricing">
+                    <div class="price-item">
+                        <div class="size">Small</div>
+                        <div class="price">₱800</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Medium</div>
+                        <div class="price">₱1,200</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Large</div>
+                        <div class="price">₱1,500</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="service-card selected">
+            <div class="service-card-header">
+                <div class="service-icon">✨</div>
+                <div class="service-badge">Premium</div>
+            </div>
+            
+            <div class="service-card-body">
+                <h3>Full Detail Package</h3>
+                <p>Complete interior and exterior detailing service for the ultimate car care experience.</p>
+                
+                <div class="service-pricing">
+                    <div class="price-item">
+                        <div class="size">Small</div>
+                        <div class="price">₱3,000</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Medium</div>
+                        <div class="price">₱4,000</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="size">Large</div>
+                        <div class="price">₱5,000</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

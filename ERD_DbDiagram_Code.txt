@@ -1,0 +1,133 @@
+// Car Detailing System ERD - DbDiagram.io Format
+// Copy this code to https://dbdiagram.io/d and it will generate a visual ERD
+
+Table users {
+  id int [pk, increment]
+  google_id varchar(255) [unique]
+  username varchar(50) [unique, not null]
+  email varchar(100) [unique, not null]
+  password varchar(255) [not null]
+  first_name varchar(50) [not null]
+  last_name varchar(50) [not null]
+  phone varchar(20)
+  role enum('admin','user') [default: 'user']
+  address text
+  date_of_birth date
+  profile_picture varchar(255)
+  email_verified boolean [default: false]
+  last_login timestamp
+  is_active boolean [default: true]
+  reset_token varchar(255)
+  reset_expires datetime
+  created_at timestamp [default: `current_timestamp`]
+  updated_at timestamp [default: `current_timestamp`, note: 'on update current_timestamp']
+}
+
+Table services {
+  service_id int [pk, increment]
+  category varchar(50) [not null]
+  service_name varchar(100) [not null]
+  description text
+  price_small decimal(10,2) [not null]
+  price_medium decimal(10,2) [not null]
+  price_large decimal(10,2) [not null]
+  duration_minutes int [default: 60]
+  included_items text
+  free_items text
+  is_active boolean [default: true]
+  created_at timestamp [default: `current_timestamp`]
+}
+
+Table bookings {
+  booking_id int [pk, increment]
+  user_id int [ref: > users.id, not null]
+  service_id int [ref: > services.service_id, not null]
+  vehicle_size enum('small','medium','large') [default: 'medium']
+  booking_date datetime [not null]
+  status enum('pending','confirmed','in_progress','completed','cancelled','declined') [default: 'pending']
+  total_amount decimal(10,2) [not null]
+  payment_status enum('pending','paid','refunded') [default: 'pending']
+  payment_verification_status enum('pending','verified','rejected') [default: 'pending']
+  vehicle_details text
+  special_requests text
+  admin_notes text
+  created_at timestamp [default: `current_timestamp`]
+  updated_at timestamp [default: `current_timestamp`, note: 'on update current_timestamp']
+}
+
+Table payments {
+  payment_id int [pk, increment]
+  booking_id int [ref: > bookings.booking_id, not null]
+  user_id int [ref: > users.id, not null]
+  amount decimal(10,2) [not null]
+  payment_method enum('cash','card','gcash','bank_transfer') [not null]
+  payment_status enum('pending','completed','failed','refunded') [default: 'pending']
+  payment_type enum('partial','full') [default: 'partial']
+  transaction_id varchar(100)
+  payment_proof_path varchar(255)
+  verification_status enum('pending','verified','rejected') [default: 'pending']
+  verified_by int [ref: > users.id]
+  verified_at timestamp
+  rejection_reason text
+  payment_date timestamp [default: `current_timestamp`]
+  notes text
+}
+
+Table reviews {
+  review_id int [pk, increment]
+  user_id int [ref: > users.id, not null]
+  booking_id int [ref: > bookings.booking_id, not null]
+  service_id int [ref: > services.service_id, not null]
+  rating int [not null, note: 'CHECK (rating >= 1 AND rating <= 5)']
+  review_text text
+  is_approved boolean [default: false]
+  admin_response text
+  created_at timestamp [default: `current_timestamp`]
+}
+
+Table notifications {
+  notification_id int [pk, increment]
+  user_id int [ref: > users.id]
+  type varchar(50) [not null]
+  title varchar(255) [not null]
+  message text [not null]
+  is_read boolean [default: false]
+  related_id int
+  action_url varchar(255)
+  created_at timestamp [default: `current_timestamp`]
+}
+
+Table activity_logs {
+  log_id int [pk, increment]
+  user_id int [ref: > users.id]
+  admin_id int [ref: > users.id]
+  action varchar(100) [not null]
+  description text
+  table_name varchar(50)
+  record_id int
+  ip_address varchar(45)
+  created_at timestamp [default: `current_timestamp`]
+}
+
+Table payment_logs {
+  log_id int [pk, increment]
+  payment_id int [ref: > payments.payment_id, not null]
+  action enum('created','verified','rejected','updated') [not null]
+  performed_by int [ref: > users.id]
+  details text
+  created_at timestamp [default: `current_timestamp`]
+}
+
+// Relationships with cardinality notes
+Ref: users.id < bookings.user_id [note: "One user can make many bookings (1:N)"]
+Ref: services.service_id < bookings.service_id [note: "One service can be booked many times (1:N)"]
+Ref: bookings.booking_id < payments.booking_id [note: "One booking can have multiple payments (1:N)"]
+Ref: users.id < payments.user_id [note: "One user can make many payments (1:N)"]
+Ref: users.id < payments.verified_by [note: "One admin can verify many payments (1:N)"]
+Ref: bookings.booking_id - reviews.booking_id [note: "One booking has one review (1:1)"]
+Ref: users.id < reviews.user_id [note: "One user can write many reviews (1:N)"]
+Ref: services.service_id < reviews.service_id [note: "One service can have many reviews (1:N)"]
+Ref: users.id < notifications.user_id [note: "One user can receive many notifications (1:N)"]
+Ref: users.id < activity_logs.user_id [note: "One user can have many activity logs (1:N)"]
+Ref: users.id < activity_logs.admin_id [note: "One admin can create many activity logs (1:N)"]
+Ref: payments.payment_id < payment_logs.payment_id [note: "One payment can have many log entries (1:N)"]

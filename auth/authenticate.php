@@ -33,9 +33,9 @@ if (isset($_POST['action']) && $_POST['action'] == 'login') {
             $_SESSION['name'] = $row['first_name'] . ' ' . $row['last_name'];
             
             if ($row['role'] == 'admin') {
-                header("Location: ../admin/dashboard.php");
+                header("Location: ../admin/dashboard_FRESH.php");
             } else {
-                header("Location: ../user/dashboard.php");
+                header("Location: ../user/dashboard_CLEAN.php");
             }
             exit();
         } else {

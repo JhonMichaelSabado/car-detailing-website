@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking System Integration - Test Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .test-card {
+            margin-bottom: 20px;
+            border-left: 4px solid #007bff;
+        }
+        .test-passed {
+            border-left-color: #28a745;
+        }
+        .test-failed {
+            border-left-color: #dc3545;
+        }
+        .test-warning {
+            border-left-color: #ffc107;
+        }
+        .result-box {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+        }
+        .status-badge {
+            font-size: 0.8em;
+            padding: 0.3em 0.6em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1><i class="fas fa-cogs"></i> Booking System Integration Test Dashboard</h1>
+                <p class="lead">Test the advanced booking system integration with your car detailing project.</p>
+                
+                <div class="alert alert-info">
+                    <strong><i class="fas fa-info-circle"></i> Instructions:</strong><br>
+                    1. First, run the SQL integration script: <code>integrate_booking_system.sql</code><br>
+                    2. Click the "Run All Tests" button below to verify the integration<br>
+                    3. Check each component individually if needed
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <button class="btn btn-primary btn-lg" onclick="runAllTests()">
+                    <i class="fas fa-play"></i> Run All Tests
+                </button>
+                <button class="btn btn-secondary" onclick="clearResults()">
+                    <i class="fas fa-trash"></i> Clear Results
+                </button>
+            </div>
+        </div>
+
+        <!-- Database Connection Test -->
+        <div class="card test-card" id="db-test">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-database"></i> Database Connection & Structure</h5>
+                <span class="badge bg-secondary status-badge">Not Tested</span>
+            </div>
+            <div class="card-body">
+                <p>Tests database connection and verifies all new tables and triggers are created.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="testDatabase()">Test Database</button>
+                <div class="result-box d-none" id="db-result"></div>
+            </div>
+        </div>
+
+        <!-- Availability Checker Test -->
+        <div class="card test-card" id="availability-test">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calendar-check"></i> Availability Checker</h5>
+                <span class="badge bg-secondary status-badge">Not Tested</span>
+            </div>
+            <div class="card-body">
+                <p>Tests the BookingAvailabilityChecker class for time slot validation and conflict detection.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="testAvailabilityChecker()">Test Availability</button>
+                <div class="result-box d-none" id="availability-result"></div>
+            </div>
+        </div>
+
+        <!-- Booking Manager Test -->
+        <div class="card test-card" id="booking-test">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-tasks"></i> Booking Manager</h5>
+                <span class="badge bg-secondary status-badge">Not Tested</span>
+            </div>
+            <div class="card-body">
+                <p>Tests the BookingManager class for creating, accepting, and managing bookings.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="testBookingManager()">Test Booking Manager</button>
+                <div class="result-box d-none" id="booking-result"></div>
+            </div>
+        </div>
+
+        <!-- API Endpoints Test -->
+        <div class="card test-card" id="api-test">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-plug"></i> API Endpoints</h5>
+                <span class="badge bg-secondary status-badge">Not Tested</span>
+            </div>
+            <div class="card-body">
+                <p>Tests the REST API endpoints for frontend integration.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="testAPIEndpoints()">Test APIs</button>
+                <div class="result-box d-none" id="api-result"></div>
+            </div>
+        </div>
+
+        <!-- Business Logic Test -->
+        <div class="card test-card" id="logic-test">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-brain"></i> Business Logic Validation</h5>
+                <span class="badge bg-secondary status-badge">Not Tested</span>
+            </div>
+            <div class="card-body">
+                <p>Tests the core business constraints: 2 customers max per day, travel buffer validation.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="testBusinessLogic()">Test Business Logic</button>
+                <div class="result-box d-none" id="logic-result"></div>
+            </div>
+        </div>
+
+        <!-- System Integration Summary -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-clipboard-check"></i> Integration Summary</h5>
+            </div>
+            <div class="card-body">
+                <div id="summary-content">
+                    <p class="text-muted">Run tests to see integration summary...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function updateTestStatus(testId, status, message) {
+            const card = document.getElementById(testId);
+            const badge = card.querySelector('.status-badge');
+            const resultBox = card.querySelector('.result-box');
+            
+            // Update badge
+            badge.className = 'badge status-badge';
+            card.className = 'card test-card';
+            
+            switch(status) {
+                case 'passed':
+                    badge.classList.add('bg-success');
+                    badge.textContent = 'Passed';
+                    card.classList.add('test-passed');
+                    break;
+                case 'failed':
+                    badge.classList.add('bg-danger');
+                    badge.textContent = 'Failed';
+                    card.classList.add('test-failed');
+                    break;
+                case 'warning':
+                    badge.classList.add('bg-warning');
+                    badge.textContent = 'Warning';
+                    card.classList.add('test-warning');
+                    break;
+                case 'running':
+                    badge.classList.add('bg-info');
+                    badge.textContent = 'Running...';
+                    break;
+            }
+            
+            // Update result
+            if (message) {
+                resultBox.textContent = message;
+                resultBox.classList.remove('d-none');
+            }
+        }
+
+        async function testDatabase() {
+            updateTestStatus('db-test', 'running', 'Testing database connection...');
+            
+            try {
+                const response = await fetch('../test/test_database.php');
+                const result = await response.text();
+                
+                if (result.includes('SUCCESS') || result.includes('PASSED')) {
+                    updateTestStatus('db-test', 'passed', result);
+                } else if (result.includes('WARNING')) {
+                    updateTestStatus('db-test', 'warning', result);
+                } else {
+                    updateTestStatus('db-test', 'failed', result);
+                }
+            } catch (error) {
+                updateTestStatus('db-test', 'failed', 'Error: ' + error.message);
+            }
+        }
+
+        async function testAvailabilityChecker() {
+            updateTestStatus('availability-test', 'running', 'Testing availability checker...');
+            
+            try {
+                const response = await fetch('../test/test_availability.php');
+                const result = await response.text();
+                
+                if (result.includes('SUCCESS') || result.includes('PASSED')) {
+                    updateTestStatus('availability-test', 'passed', result);
+                } else {
+                    updateTestStatus('availability-test', 'failed', result);
+                }
+            } catch (error) {
+                updateTestStatus('availability-test', 'failed', 'Error: ' + error.message);
+            }
+        }
+
+        async function testBookingManager() {
+            updateTestStatus('booking-test', 'running', 'Testing booking manager...');
+            
+            try {
+                const response = await fetch('../test/test_booking_manager.php');
+                const result = await response.text();
+                
+                if (result.includes('SUCCESS') || result.includes('PASSED')) {
+                    updateTestStatus('booking-test', 'passed', result);
+                } else {
+                    updateTestStatus('booking-test', 'failed', result);
+                }
+            } catch (error) {
+                updateTestStatus('booking-test', 'failed', 'Error: ' + error.message);
+            }
+        }
+
+        async function testAPIEndpoints() {
+            updateTestStatus('api-test', 'running', 'Testing API endpoints...');
+            
+            try {
+                // Test multiple endpoints
+                const tests = [
+                    '../api/get_available_slots.php?date=' + new Date().toISOString().split('T')[0],
+                    '../api/get_unavailable_dates.php?start_date=' + new Date().toISOString().split('T')[0]
+                ];
+                
+                let results = [];
+                for (let url of tests) {
+                    try {
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        results.push(`${url}: ${data.success ? 'SUCCESS' : 'FAILED'}`);
+                    } catch (e) {
+                        results.push(`${url}: ERROR - ${e.message}`);
+                    }
+                }
+                
+                const allPassed = results.every(r => r.includes('SUCCESS'));
+                updateTestStatus('api-test', allPassed ? 'passed' : 'failed', results.join('\n'));
+                
+            } catch (error) {
+                updateTestStatus('api-test', 'failed', 'Error: ' + error.message);
+            }
+        }
+
+        async function testBusinessLogic() {
+            updateTestStatus('logic-test', 'running', 'Testing business logic...');
+            
+            try {
+                const response = await fetch('../test/test_business_logic.php');
+                const result = await response.text();
+                
+                if (result.includes('SUCCESS') || result.includes('PASSED')) {
+                    updateTestStatus('logic-test', 'passed', result);
+                } else {
+                    updateTestStatus('logic-test', 'failed', result);
+                }
+            } catch (error) {
+                updateTestStatus('logic-test', 'failed', 'Error: ' + error.message);
+            }
+        }
+
+        async function runAllTests() {
+            const tests = [testDatabase, testAvailabilityChecker, testBookingManager, testAPIEndpoints, testBusinessLogic];
+            
+            for (let test of tests) {
+                await test();
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between tests
+            }
+            
+            updateSummary();
+        }
+
+        function clearResults() {
+            const cards = document.querySelectorAll('.test-card');
+            cards.forEach(card => {
+                const badge = card.querySelector('.status-badge');
+                const resultBox = card.querySelector('.result-box');
+                
+                badge.className = 'badge bg-secondary status-badge';
+                badge.textContent = 'Not Tested';
+                card.className = 'card test-card';
+                resultBox.classList.add('d-none');
+                resultBox.textContent = '';
+            });
+            
+            document.getElementById('summary-content').innerHTML = '<p class="text-muted">Run tests to see integration summary...</p>';
+        }
+
+        function updateSummary() {
+            const badges = document.querySelectorAll('.status-badge');
+            let passed = 0, failed = 0, warnings = 0, total = badges.length;
+            
+            badges.forEach(badge => {
+                if (badge.textContent === 'Passed') passed++;
+                else if (badge.textContent === 'Failed') failed++;
+                else if (badge.textContent === 'Warning') warnings++;
+            });
+            
+            const summaryHtml = `
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-success">${passed}</h4>
+                            <small>Passed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-danger">${failed}</h4>
+                            <small>Failed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-warning">${warnings}</h4>
+                            <small>Warnings</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-info">${total}</h4>
+                            <small>Total Tests</small>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="alert ${failed > 0 ? 'alert-danger' : passed === total ? 'alert-success' : 'alert-warning'}">
+                    <strong>Integration Status:</strong> ${
+                        failed > 0 ? 'Issues Found - Review failed tests' :
+                        passed === total ? 'All Systems Operational' :
+                        'Partial Success - Check warnings'
+                    }
+                </div>
+            `;
+            
+            document.getElementById('summary-content').innerHTML = summaryHtml;
+        }
+    </script>
+</body>
+</html>

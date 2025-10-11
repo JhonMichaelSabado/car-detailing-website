@@ -1,0 +1,147 @@
+## Car Detailing System - ERD for Visual Tools
+## Copy this to draw.io, Lucidchart, or similar tools
+
+### ENTITIES AND ATTRIBUTES:
+
+**USERS**
+- id (PK)
+- google_id
+- username
+- email
+- password
+- first_name
+- last_name
+- phone
+- role
+- address
+- date_of_birth
+- profile_picture
+- email_verified
+- last_login
+- is_active
+- reset_token
+- reset_expires
+- created_at
+- updated_at
+
+**SERVICES**
+- service_id (PK)
+- category
+- service_name
+- description
+- price_small
+- price_medium
+- price_large
+- duration_minutes
+- included_items
+- free_items
+- is_active
+- created_at
+
+**BOOKINGS**
+- booking_id (PK)
+- user_id (FK)
+- service_id (FK)
+- vehicle_size
+- booking_date
+- status
+- total_amount
+- payment_status
+- payment_verification_status
+- vehicle_details
+- special_requests
+- admin_notes
+- created_at
+- updated_at
+
+**PAYMENTS**
+- payment_id (PK)
+- booking_id (FK)
+- user_id (FK)
+- amount
+- payment_method
+- payment_status
+- payment_type
+- transaction_id
+- payment_proof_path
+- verification_status
+- verified_by (FK)
+- verified_at
+- rejection_reason
+- payment_date
+- notes
+
+**REVIEWS**
+- review_id (PK)
+- user_id (FK)
+- booking_id (FK)
+- service_id (FK)
+- rating
+- review_text
+- is_approved
+- admin_response
+- created_at
+
+**NOTIFICATIONS**
+- notification_id (PK)
+- user_id (FK)
+- type
+- title
+- message
+- is_read
+- related_id
+- action_url
+- created_at
+
+**ACTIVITY_LOGS**
+- log_id (PK)
+- user_id (FK)
+- admin_id (FK)
+- action
+- description
+- table_name
+- record_id
+- ip_address
+- created_at
+
+**PAYMENT_LOGS**
+- log_id (PK)
+- payment_id (FK)
+- action
+- performed_by (FK)
+- details
+- created_at
+
+### RELATIONSHIPS:
+
+1. users(1) → bookings(M) [user_id]
+2. services(1) → bookings(M) [service_id]
+3. bookings(1) → payments(M) [booking_id]
+4. users(1) → payments(M) [user_id]
+5. users(1) → payments(M) [verified_by]
+6. bookings(1) → reviews(1) [booking_id]
+7. users(1) → reviews(M) [user_id]
+8. services(1) → reviews(M) [service_id]
+9. users(1) → notifications(M) [user_id]
+10. users(1) → activity_logs(M) [user_id]
+11. users(1) → activity_logs(M) [admin_id]
+12. payments(1) → payment_logs(M) [payment_id]
+13. users(1) → payment_logs(M) [performed_by]
+
+### CARDINALITY NOTES:
+- 1:M = One to Many
+- 1:1 = One to One
+- M:M = Many to Many (handled through junction tables)
+
+### DRAW.IO INSTRUCTIONS:
+1. Create rectangles for each entity
+2. List attributes inside rectangles
+3. Mark primary keys with (PK)
+4. Mark foreign keys with (FK)
+5. Draw lines between related entities
+6. Add cardinality symbols (1, M) at line ends
+7. Use different colors for entity types:
+   - Blue: Core entities (users, services, bookings)
+   - Green: Transaction entities (payments)
+   - Yellow: Support entities (reviews, notifications)
+   - Gray: Audit entities (logs)

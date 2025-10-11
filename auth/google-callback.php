@@ -96,7 +96,7 @@ if (isset($_GET['code'])) {
             if (isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
                 header("Location: ../admin/dashboard.php");
             } else {
-                header("Location: ../user/dashboard.php");
+                header("Location: ../user/dashboard_CLEAN.php");
             }
             exit();
         } else {
