@@ -1,0 +1,202 @@
+# Current Payment Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    CURRENT BOOKING & PAYMENT FLOW                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────┐
+│   Step 1    │  User selects service & vehicle size
+│   Service   │  → step1_service_selection.php
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Step 2    │  User enters service address
+│  Location   │  → step2_location.php
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Step 3    │  User selects date & time slot
+│  DateTime   │  → step3_datetime.php
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Step 4    │  User selects:
+│  Payment    │  • Payment mode (50% or full)
+│   Mode      │  • Payment method (GCash/Maya/Bank/Card)
+└──────┬──────┘  • Can apply promo code
+       │         ⚠️  NO ACTUAL PAYMENT PROCESSING
+       ▼
+┌─────────────┐
+│   Step 5    │  User reviews all details
+│   Review    │  • Can upload payment proof here
+│             │  • Accepts terms & conditions
+└──────┬──────┘  → Submits to process_booking_fixed.php
+       │
+       ▼
+┌─────────────────────────────────────────────┐
+│         process_booking_fixed.php           │
+│  ✅ Creates booking in DB (status: pending) │
+│  ✅ Creates payment record (status: pending)│
+│  ⚠️  Does NOT process actual payment        │
+│  → Redirects to booking_confirmation.php    │
+└───────────────────┬─────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────┐
+│       booking_confirmation.php              │
+│  • Shows booking reference number           │
+│  • Shows payment instructions               │
+│  • Shows "Pending Admin Approval" status    │
+│  • Allows payment proof upload              │
+└─────────────────────────────────────────────┘
+                    │
+                    ▼
+        ┌───────────┴───────────┐
+        │                       │
+        ▼                       ▼
+┌─────────────┐         ┌─────────────┐
+│ USER ACTION │         │   MANUAL    │
+│  (Manual)   │         │   PROCESS   │
+├─────────────┤         ├─────────────┤
+│ 1. Pay via  │         │ 1. Admin    │
+│    GCash    │────────→│    reviews  │
+│    manually │         │    booking  │
+│             │         │             │
+│ 2. Upload   │         │ 2. Admin    │
+│    proof    │────────→│    verifies │
+│    screenshot        │    payment  │
+│                      │    proof    │
+│                      │             │
+│                      │ 3. Admin    │
+│                      │    updates  │
+│                      │    status   │
+└──────────────────────┴─────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+              WHAT'S MISSING: AUTOMATED PAYMENT
+
+┌─────────────────────────────────────────────────────────────────┐
+│                  SHOULD HAPPEN INSTEAD:                         │
+└─────────────────────────────────────────────────────────────────┘
+
+                    After Step 5 Review
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │  Payment Gateway        │
+              │  Integration            │
+              ├────────────────────────┤
+              │ → GCash API (PayMongo) │
+              │ → Maya API (PayMongo)  │
+              │ → Stripe (Cards)       │
+              │ → PayPal               │
+              └────────┬───────────────┘
+                       │
+                       ▼
+              ┌────────────────────┐
+              │ User redirected to │
+              │ payment gateway    │
+              │ (GCash/Maya/Card)  │
+              └────────┬───────────┘
+                       │
+                       ▼
+              ┌────────────────────┐
+              │ User completes     │
+              │ payment securely   │
+              └────────┬───────────┘
+                       │
+                       ▼
+              ┌────────────────────┐
+              │ Webhook callback   │
+              │ confirms payment   │
+              └────────┬───────────┘
+                       │
+                       ▼
+              ┌────────────────────┐
+              │ Booking auto-      │
+              │ confirmed & paid   │
+              │ Email sent ✅      │
+              └────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+                    FILE STRUCTURE
+
+┌─────────────────────────────────────────────────────────────────┐
+│  user/booking/                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│  step1_service_selection.php     ← Service selection           │
+│  step2_location.php              ← Address & travel fee        │
+│  step3_datetime.php              ← Date & time picker          │
+│  step4_payment_mode.php          ← Payment options             │
+│  step5_review.php                ← Final review                │
+│  process_booking_fixed.php       ← Creates booking             │
+│  booking_confirmation.php        ← Shows confirmation          │
+│  payment_upload.php              ← Handles proof upload        │
+│  validate_promo_code.php         ← Validates promo codes       │
+│                                                                 │
+│  ⚠️  MISSING FILES:                                             │
+│  payment_gateway.php             ← Gateway integration         │
+│  payment_callback.php            ← Handle payment response     │
+│  payment_webhook.php             ← Handle gateway webhooks     │
+│  payment_verify.php              ← Verify payment status       │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+                 DATABASE PAYMENT TABLES
+
+┌─────────────────────────────────────────────────────────────────┐
+│  bookings table                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  • booking_id                                                   │
+│  • payment_mode (deposit_50 / full_payment)                     │
+│  • payment_method (gcash / maya / bank_transfer / cash)         │
+│  • payment_status (pending / partial / paid / refunded)         │
+│  • total_amount                                                 │
+│  • deposit_amount                                               │
+│  • remaining_amount                                             │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  payments table                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  • payment_id                                                   │
+│  • booking_id                                                   │
+│  • payment_type (deposit / final / full / refund)               │
+│  • amount                                                       │
+│  • payment_method                                               │
+│  • payment_status (pending / processing / completed / failed)   │
+│  • transaction_id (from gateway) ⚠️  NOT POPULATED             │
+│  • payment_date                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  payment_proofs table ✅ NEW                                    │
+├─────────────────────────────────────────────────────────────────┤
+│  • id                                                           │
+│  • booking_id                                                   │
+│  • user_id                                                      │
+│  • filename                                                     │
+│  • filepath                                                     │
+│  • uploaded_at                                                  │
+│  • status (pending / verified / rejected)                       │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+                     SUMMARY
+
+✅ Booking flow works perfectly
+✅ Promo code system works
+✅ Payment proof upload implemented
+❌ NO automated payment gateway
+❌ Manual verification required
+❌ Slow confirmation (24-48 hours)
+
+RECOMMENDATION: Integrate PayMongo for automated payments

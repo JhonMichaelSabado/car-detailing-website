@@ -1,0 +1,19 @@
+# Mock Payment System - Demo/Test Instructions
+
+1. Complete a booking as usual until the review step.
+2. After review, you will be redirected to the payment gateway page.
+3. Choose a payment method:
+   - 💙 GCash: Enter a valid PH number and any 6-digit OTP
+   - 🟢 Maya: Enter a valid PH number and any 4-digit MPIN
+   - 🏦 Bank Transfer: Enter your name, any reference, and optionally upload a deposit slip
+   - 🏪 Over-the-Counter: See payment code, enter your name, and mark as paid
+4. All payments are simulated. No real money is charged.
+5. After payment, you are redirected to the booking confirmation page with a success message.
+6. For demo, you can repeat with different methods/bookings.
+
+---
+
+## For Teachers/Panel:
+- This is a mock system for academic demonstration only.
+- No real payment is processed.
+- All payment methods are simulated to look and feel like real Philippine payment flows.

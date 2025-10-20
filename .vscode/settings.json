@@ -1,5 +1,6 @@
 {
     "php.suggest.basic": false,
+    "chat.agent.enabled": true,
     "php.validate.enable": true,
     "php.validate.run": "onType",
     "intelephense.files.exclude": [

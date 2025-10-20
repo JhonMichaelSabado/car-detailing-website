@@ -1,23 +1,32 @@
 <?php
 session_start();
 
-// Redirect to new professional booking flow
-$service_id = isset($_GET['service_id']) ? (int)$_GET['service_id'] : 1;
-header("Location: booking/step1_service_selection.php?service_id=" . $service_id);
-exit();
-?>
+// Redirect if not logged in
+// if (!isset($_SESSION['user_id'])) {
+//     header('Location: ../login.php');
+//     exit;
+// }
+
+// Set dummy user_id for testing
+$_SESSION['user_id'] = 1;
+
+// Database connection
+require_once '../config/database.php';
+require_once '../includes/database_functions.php';
+
+// Get database connection
+$database = new Database();
+$db = $database->getConnection();
+$carDB = new CarDetailingDB($db);
+
+if (!$db) {
+    die("Database connection failed. Please check your configuration.");
+}
+
+// Maps configuration - use free version
+require_once '../config/maps_config.php';
 
 $booking_result = null;
-
-// Server-side Haversine distance function
-function haversineDistance($lat1, $lon1, $lat2, $lon2) {
-    $R = 6371; // km
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLon = deg2rad($lon2 - $lon1);
-    $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-    return $R * $c;
-}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_booking') {
@@ -83,18 +92,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         
         if (!$checker->isTimeSlotAvailable($booking_date, $booking_time, null)) {
             throw new Exception("Selected time slot is not available. Please choose another time.");
-        }
-        
-        // Server-side distance validation: ensure coordinates are within 25 km
-        $service_lat = $_POST['service_lat'] ?? null;
-        $service_lng = $_POST['service_lng'] ?? null;
-        if ($service_lat && $service_lng) {
-            $business_lat = floatval(DEFAULT_MAP_LAT);
-            $business_lng = floatval(DEFAULT_MAP_LNG);
-            $distance_km = haversineDistance($business_lat, $business_lng, floatval($service_lat), floatval($service_lng));
-            if ($distance_km > 25) {
-                throw new Exception("Service location is outside our 25 km service radius (" . number_format($distance_km, 2) . " km).");
-            }
         }
         
         // Insert booking
@@ -170,13 +167,6 @@ $selected_service_id = $_GET['service_id'] ?? '';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <!-- Leaflet (OpenStreetMap) for fallback when Google Maps is unavailable -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-o9N1j7kG6k3b3g3M2g9e1bqgqGJgqv+Vd5s5b0Q5p2s=" crossorigin="" />
-        <style>
-            /* Ensure map has a sensible height when rendered */
-            #map { height: 360px; border-radius: 12px; overflow: hidden; }
-            #mapStatus { margin-top: 8px; font-size: 0.95rem; }
-        </style>
     <!-- Google Maps API Configuration -->
     <script>
         // Configuration from PHP
@@ -203,391 +193,24 @@ $selected_service_id = $_GET['service_id'] ?? '';
             };
             document.head.appendChild(script);
         }
-
-        // Google Maps initialization callback
-        window.initMap = function() {
-            try {
-                const businessLat = parseFloat(DEFAULT_MAP_LAT) || 14.4791;
-                const businessLng = parseFloat(DEFAULT_MAP_LNG) || 120.9099;
-                
-                const map = new google.maps.Map(document.getElementById('map'), {
-                    center: { lat: businessLat, lng: businessLng },
-                    zoom: 12,
-                    styles: [
-                        { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-                        { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-                        { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-                        { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] }
-                    ]
-                });
-
-                // Business center marker
-                new google.maps.Marker({
-                    position: { lat: businessLat, lng: businessLng },
-                    map: map,
-                    title: 'Cavite Civic Center - Service Center',
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: '#FF0000',
-                        fillOpacity: 1,
-                        strokeColor: '#FFFFFF',
-                        strokeWeight: 2
-                    }
-                });
-
-                // Customer location marker (draggable)
-                const customerMarker = new google.maps.Marker({
-                    position: { lat: businessLat, lng: businessLng },
-                    map: map,
-                    draggable: true,
-                    title: 'Drag to your location',
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 10,
-                        fillColor: '#FFD700',
-                        fillOpacity: 1,
-                        strokeColor: '#FFFFFF',
-                        strokeWeight: 2
-                    }
-                });
-
-                // Service radius circle
-                new google.maps.Circle({
-                    strokeColor: '#FFD700',
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: '#FFD700',
-                    fillOpacity: 0.1,
-                    map: map,
-                    center: { lat: businessLat, lng: businessLng },
-                    radius: 25000 // 25km in meters
-                });
-
-                const geocoder = new google.maps.Geocoder();
-                const addressInput = document.getElementById('service_address');
-
-                function updateHidden(lat, lng) {
-                    const latEl = document.getElementById('final_service_lat');
-                    const lngEl = document.getElementById('final_service_lng');
-                    if (latEl) latEl.value = lat;
-                    if (lngEl) lngEl.value = lng;
-                }
-
-                function haversineDistance(lat1, lon1, lat2, lon2) {
-                    const R = 6371;
-                    const dLat = (lat2 - lat1) * Math.PI / 180;
-                    const dLon = (lon2 - lon1) * Math.PI / 180;
-                    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                    return R * c;
-                }
-
-                function evaluate(lat, lng) {
-                    const d = haversineDistance(businessLat, businessLng, lat, lng);
-                    let statusEl = document.getElementById('mapStatus');
-                    if (!statusEl) {
-                        statusEl = document.createElement('div');
-                        statusEl.id = 'mapStatus';
-                        statusEl.style.marginTop = '8px';
-                        statusEl.style.fontSize = '0.95rem';
-                        statusEl.style.textAlign = 'center';
-                        statusEl.style.padding = '8px';
-                        statusEl.style.borderRadius = '8px';
-                        document.getElementById('map').after(statusEl);
-                    }
-
-                    if (d <= 25) {
-                        statusEl.textContent = `✅ Within service area (${d.toFixed(2)} km from Cavite Civic Center)`;
-                        statusEl.style.backgroundColor = 'rgba(185, 246, 202, 0.2)';
-                        statusEl.style.color = '#b9f6ca';
-                        statusEl.style.border = '1px solid #b9f6ca';
-                        const nextBtn = document.getElementById('nextToDateTime') || document.getElementById('continueToDateTime');
-                        if (nextBtn) nextBtn.disabled = false;
-                    } else {
-                        statusEl.textContent = `❌ Outside service area (${d.toFixed(2)} km). We only service within 25 km of Cavite Civic Center.`;
-                        statusEl.style.backgroundColor = 'rgba(255, 180, 180, 0.2)';
-                        statusEl.style.color = '#ffb4b4';
-                        statusEl.style.border = '1px solid #ffb4b4';
-                        const nextBtn = document.getElementById('nextToDateTime') || document.getElementById('continueToDateTime');
-                        if (nextBtn) nextBtn.disabled = true;
-                    }
-                }
-
-                // Handle marker drag
-                customerMarker.addListener('dragend', function() {
-                    const position = customerMarker.getPosition();
-                    updateHidden(position.lat(), position.lng());
-                    evaluate(position.lat(), position.lng());
-                    
-                    // Reverse geocode
-                    geocoder.geocode({ location: position }, function(results, status) {
-                        if (status === 'OK' && results[0]) {
-                            addressInput.value = results[0].formatted_address;
-                            if (typeof bookingData !== 'undefined') {
-                                bookingData.serviceAddress = results[0].formatted_address;
-                            }
-                        }
-                    });
-                });
-
-                // Handle map click
-                map.addListener('click', function(event) {
-                    customerMarker.setPosition(event.latLng);
-                    updateHidden(event.latLng.lat(), event.latLng.lng());
-                    evaluate(event.latLng.lat(), event.latLng.lng());
-                    
-                    // Reverse geocode
-                    geocoder.geocode({ location: event.latLng }, function(results, status) {
-                        if (status === 'OK' && results[0]) {
-                            addressInput.value = results[0].formatted_address;
-                            if (typeof bookingData !== 'undefined') {
-                                bookingData.serviceAddress = results[0].formatted_address;
-                            }
-                        }
-                    });
-                });
-
-                // Address input autocomplete
-                if (addressInput) {
-                    const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-                        componentRestrictions: { country: 'ph' },
-                        fields: ['formatted_address', 'geometry']
-                    });
-
-                    autocomplete.addListener('place_changed', function() {
-                        const place = autocomplete.getPlace();
-                        if (place.geometry) {
-                            const lat = place.geometry.location.lat();
-                            const lng = place.geometry.location.lng();
-                            customerMarker.setPosition(place.geometry.location);
-                            map.setCenter(place.geometry.location);
-                            map.setZoom(15);
-                            updateHidden(lat, lng);
-                            evaluate(lat, lng);
-                        }
-                    });
-                }
-
-                console.log('✅ Google Maps loaded successfully!');
-            } catch (error) {
-                console.error('Error initializing Google Maps:', error);
-                showMapFallback();
-            }
-        };
         
         function showMapFallback() {
             const mapElement = document.getElementById('map');
-            if (!mapElement) return;
-
-            // Prepare a container for Leaflet
-            mapElement.innerHTML = '<div id="leafletMap" style="height:360px; border-radius:12px;"></div>';
-
-            const ensureLeaflet = (cb) => {
-                if (typeof L === 'undefined') {
-                    const s = document.createElement('script');
-                    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                    s.onload = cb;
-                    s.onerror = function() {
-                        // If Leaflet fails to load, show a graceful message
-                        mapElement.innerHTML = `
-                            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);color:#FFD700;padding:20px;border-radius:10px;text-align:center;">
-                                <i class="fas fa-map-marker-alt" style="font-size:3rem;margin-bottom:15px;opacity:0.7;"></i>
-                                <div style="font-weight:bold;margin-bottom:10px;">Interactive Map Unavailable</div>
-                                <div style="font-size:0.9rem;color:#ccc;line-height:1.4;">Please enter your complete address above. Our team will contact you to confirm the exact location.</div>
-                            </div>
-                        `;
-                    };
-                    document.head.appendChild(s);
-                    return;
-                }
-                cb();
-            };
-
-            ensureLeaflet(function init() {
-                const businessLat = parseFloat(DEFAULT_MAP_LAT) || 14.4791;
-                const businessLng = parseFloat(DEFAULT_MAP_LNG) || 120.9099;
-                const rangeKm = 25;
-
-                const map = L.map('leafletMap').setView([businessLat, businessLng], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(map);
-
-                // Business center marker (red)
-                const businessMarker = L.marker([businessLat, businessLng], {
-                    icon: L.divIcon({
-                        html: '<div style="background:#FF0000;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
-                    })
-                }).addTo(map).bindPopup('Cavite Civic Center<br><small>Service Center</small>');
-
-                // Customer location marker (draggable, gold)
-                const customerMarker = L.marker([businessLat, businessLng], { 
-                    draggable: true,
-                    icon: L.divIcon({
-                        html: '<div style="background:#FFD700;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>',
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    })
-                }).addTo(map).bindPopup('Drag me to your location');
-
-                // Service radius circle
-                const circle = L.circle([businessLat, businessLng], { 
-                    radius: rangeKm * 1000, 
-                    color: '#FFD700', 
-                    fillColor: '#FFD700',
-                    fillOpacity: 0.1,
-                    weight: 2
-                }).addTo(map);
-
-                // Status element
-                let statusEl = document.getElementById('mapStatus');
-                if (!statusEl) {
-                    statusEl = document.createElement('div');
-                    statusEl.id = 'mapStatus';
-                    statusEl.style.marginTop = '8px';
-                    statusEl.style.fontSize = '0.95rem';
-                    statusEl.style.textAlign = 'center';
-                    statusEl.style.padding = '8px';
-                    statusEl.style.borderRadius = '8px';
-                    mapElement.after(statusEl);
-                }
-
-                function setStatus(msg, ok) {
-                    statusEl.textContent = msg;
-                    statusEl.style.backgroundColor = ok ? 'rgba(185, 246, 202, 0.2)' : 'rgba(255, 180, 180, 0.2)';
-                    statusEl.style.color = ok ? '#b9f6ca' : '#ffb4b4';
-                    statusEl.style.border = ok ? '1px solid #b9f6ca' : '1px solid #ffb4b4';
-                }
-
-                function toRad(x){return x*Math.PI/180}
-                function haversine(lat1, lon1, lat2, lon2){
-                    const R = 6371; // km
-                    const dLat = toRad(lat2-lat1);
-                    const dLon = toRad(lon2-lon1);
-                    const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                    return R * c;
-                }
-
-                function updateHidden(lat, lng) {
-                    const latEl = document.getElementById('final_service_lat');
-                    const lngEl = document.getElementById('final_service_lng');
-                    if (latEl) latEl.value = lat;
-                    if (lngEl) lngEl.value = lng;
-                }
-
-                function updateAddressField(address) {
-                    const addressInput = document.getElementById('service_address');
-                    if (addressInput && address) {
-                        addressInput.value = address;
-                        // Update booking data if available
-                        if (typeof bookingData !== 'undefined') {
-                            bookingData.serviceAddress = address;
-                        }
-                    }
-                }
-
-                // Reverse geocoding using Nominatim (OpenStreetMap)
-                function reverseGeocode(lat, lng, callback) {
-                    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
-                    fetch(url)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data && data.display_name) {
-                                callback(data.display_name);
-                            } else {
-                                callback(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                            }
-                        })
-                        .catch(() => {
-                            callback(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                        });
-                }
-
-                function evaluate(lat, lng) {
-                    const d = haversine(businessLat, businessLng, lat, lng);
-                    const within = d <= rangeKm + 0.001;
-                    
-                    if (within) {
-                        setStatus(`✅ Within service area (${d.toFixed(2)} km from Cavite Civic Center)`, true);
-                        const nextBtn = document.getElementById('nextToDateTime') || document.getElementById('continueToDateTime');
-                        if (nextBtn) nextBtn.disabled = false;
-                    } else {
-                        setStatus(`❌ Outside service area (${d.toFixed(2)} km). We only service within ${rangeKm} km of Cavite Civic Center.`, false);
-                        const nextBtn = document.getElementById('nextToDateTime') || document.getElementById('continueToDateTime');
-                        if (nextBtn) nextBtn.disabled = true;
-                    }
-
-                    // Update address automatically
-                    reverseGeocode(lat, lng, updateAddressField);
-                }
-
-                // Handle marker drag
-                customerMarker.on('dragend', function(e){
-                    const p = customerMarker.getLatLng();
-                    updateHidden(p.lat, p.lng);
-                    evaluate(p.lat, p.lng);
-                });
-
-                // Handle map click
-                map.on('click', function(e){
-                    customerMarker.setLatLng(e.latlng);
-                    updateHidden(e.latlng.lat, e.latlng.lng);
-                    evaluate(e.latlng.lat, e.latlng.lng);
-                });
-
-                // Handle address input (forward geocoding)
-                const addressInput = document.getElementById('service_address');
-                if (addressInput) {
-                    let geocodeTimeout;
-                    addressInput.addEventListener('input', function() {
-                        clearTimeout(geocodeTimeout);
-                        const query = this.value.trim();
-                        if (query.length > 10) {
-                            geocodeTimeout = setTimeout(() => {
-                                // Forward geocoding using Nominatim
-                                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=ph`;
-                                fetch(url)
-                                    .then(response => response.json())
-                                    .then(data => {
-                                        if (data && data.length > 0) {
-                                            const lat = parseFloat(data[0].lat);
-                                            const lng = parseFloat(data[0].lon);
-                                            customerMarker.setLatLng([lat, lng]);
-                                            map.setView([lat, lng], 15);
-                                            updateHidden(lat, lng);
-                                            evaluate(lat, lng);
-                                        }
-                                    })
-                                    .catch(console.error);
-                            }, 1000); // Wait 1 second after typing stops
-                        }
-                    });
-                }
-
-                // Try to use browser geolocation
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(pos){
-                        const lat = pos.coords.latitude; 
-                        const lng = pos.coords.longitude;
-                        customerMarker.setLatLng([lat, lng]);
-                        map.setView([lat, lng], 15);
-                        updateHidden(lat, lng);
-                        evaluate(lat, lng);
-                    }, function(){
-                        // Fallback to business location
-                        updateHidden(businessLat, businessLng);
-                        evaluate(businessLat, businessLng);
-                    }, { timeout: 5000 });
-                } else {
-                    updateHidden(businessLat, businessLng);
-                    evaluate(businessLat, businessLng);
-                }
-            });
+            if (mapElement) {
+                mapElement.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: #FFD700; font-size: 1.1rem; text-align: center; padding: 20px; border-radius: 10px;">
+                        <i class="fas fa-map-marker-alt" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.7;"></i>
+                        <div style="margin-bottom: 10px; font-weight: bold;">Interactive Map Unavailable</div>
+                        <div style="font-size: 0.9rem; color: #ccc; line-height: 1.4;">
+                            Please enter your complete address above.<br>
+                            Our team will contact you to confirm the exact location.
+                        </div>
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(255,215,0,0.1); border-radius: 5px; font-size: 0.8rem; color: #FFD700;">
+                            💡 To enable interactive maps, configure your Google Maps API key in config/maps_config.php
+                        </div>
+                    </div>
+                `;
+            }
         }
     </script>
     <style>
@@ -1620,9 +1243,6 @@ $selected_service_id = $_GET['service_id'] ?? '';
         <input type="hidden" name="special_instructions" id="final_special_instructions">
         <input type="hidden" name="payment_method" id="final_payment_method">
         <input type="hidden" name="total_amount" id="final_total_amount">
-        <!-- Hidden coordinates populated by map (Google or Leaflet fallback) -->
-        <input type="hidden" name="service_lat" id="final_service_lat">
-        <input type="hidden" name="service_lng" id="final_service_lng">
     </form>
 
     <script>

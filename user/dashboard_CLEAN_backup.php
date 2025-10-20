@@ -1,4 +1,17 @@
 <?php
+// Enable error display for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Add debug for any POST request
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    error_log("=== ANY POST REQUEST DEBUG ===");
+    error_log("POST keys: " . implode(', ', array_keys($_POST)));
+    error_log("Full POST data: " . print_r($_POST, true));
+    error_log("==============================");
+}
+
 session_start();
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
     header("Location: ../auth/login.php");
@@ -7,13 +20,145 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/database_functions.php';
+require_once __DIR__ . '/../includes/BookingAvailabilityChecker.php';
+require_once __DIR__ . '/../includes/BookingManager.php';
 
 $database = new Database();
 $db = $database->getConnection();
 $carDB = new CarDetailingDB($db);
 
-// Get user information
+// Get user ID from session
 $user_id = $_SESSION['user_id'];
+
+// Initialize advanced booking system
+$availability_checker = new BookingAvailabilityChecker($db);
+$booking_manager = new BookingManager($db);
+
+// Handle advanced booking form submission
+$booking_result = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_advanced_booking') {
+    // Debug: Check what we actually received
+    $debug_info = "POST Debug Info:\n";
+    $debug_info .= "Service Address POST: '" . ($_POST['service_address'] ?? 'NOT_SET') . "'\n";
+    $debug_info .= "Contact Number POST: '" . ($_POST['contact_number'] ?? 'NOT_SET') . "'\n";
+    $debug_info .= "Payment Option POST: '" . ($_POST['payment_option'] ?? 'NOT_SET') . "'\n";
+    $debug_info .= "All POST keys: " . implode(', ', array_keys($_POST)) . "\n";
+    error_log($debug_info);
+    
+    try {
+        // Get user address from database
+        $stmt = $db->prepare("SELECT address FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user_address = $stmt->fetchColumn();
+        
+        if (empty($user_address)) {
+            $user_address = 'To be confirmed'; // Allow booking, address will be confirmed by admin
+        }
+        
+        // Parse booking date and time
+        $booking_date = $_POST['booking_date'];
+        $booking_time = $_POST['booking_time'];
+        
+        // Create booking directly using the actual database schema
+        try {
+            // Get form data with validation - only access if form was submitted
+            $service_address = isset($_POST['service_address']) ? trim($_POST['service_address']) : '';
+            $contact_number = isset($_POST['contact_number']) ? trim($_POST['contact_number']) : '';
+            $payment_option = isset($_POST['payment_option']) ? $_POST['payment_option'] : 'partial';
+            
+            // Debug the actual values
+            error_log("Validation Debug - Service Address: '" . $service_address . "' (length: " . strlen($service_address) . ")");
+            error_log("Validation Debug - Contact Number: '" . $contact_number . "' (length: " . strlen($contact_number) . ")");
+            error_log("Full POST data: " . print_r($_POST, true));
+            
+            // Validate required fields
+            if (empty($service_address)) {
+                throw new Exception("Service address is required. Received: '" . $service_address . "'");
+            }
+            if (empty($contact_number)) {
+                throw new Exception("Contact number is required. Received: '" . $contact_number . "'");
+            }
+            
+            // Get service details for total amount calculation
+            $stmt = $db->prepare("SELECT * FROM services WHERE service_id = ?");
+            $stmt->execute([$_POST['service_id']]);
+            $service = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$service) {
+                throw new Exception("Service not found");
+            }
+            
+            // Calculate total amount based on vehicle size
+            $vehicle_size = $_POST['vehicle_size'];
+            $price_column = 'price_' . $vehicle_size;
+            $total_amount = $service[$price_column];
+            
+            // Create booking with actual table structure
+            $stmt = $db->prepare("
+                INSERT INTO bookings (
+                    user_id, service_id, vehicle_size, booking_date, booking_time,
+                    total_amount, vehicle_details, special_requests, status,
+                    payment_status, estimated_duration, customer_notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 120, ?, NOW())
+            ");
+            
+            // Combine date and time for booking_date field (if it's datetime)
+            $booking_datetime = $booking_date . ' ' . $booking_time;
+            
+            // Prepare comprehensive customer notes for admin review
+            $customer_notes = "SERVICE ADDRESS: " . $service_address . "\n";
+            $customer_notes .= "CONTACT NUMBER: " . $contact_number . "\n";
+            $customer_notes .= "PAYMENT OPTION: " . $payment_option . "\n";
+            if (!empty($_POST['special_requests'])) {
+                $customer_notes .= "SPECIAL REQUESTS: " . $_POST['special_requests'];
+            }
+            
+            $result = $stmt->execute([
+                $user_id,
+                $_POST['service_id'],
+                $vehicle_size,
+                $booking_datetime,
+                $booking_time,
+                $total_amount,
+                $_POST['vehicle_details'],
+                $_POST['special_requests'],
+                $customer_notes
+            ]);
+            
+            if ($result) {
+                $booking_id = $db->lastInsertId();
+                
+                // Get payment info for success message (already validated above)
+                $payment_amount = $payment_option === 'full' ? $total_amount : ($total_amount * 0.5);
+                $payment_text = $payment_option === 'full' ? 'Full Payment' : '50% Down Payment';
+                
+                $booking_result = [
+                    'type' => 'success',
+                    'message' => "Booking created successfully! Booking ID: #{$booking_id}<br>" .
+                               "Payment Required: {$payment_text} - ₱" . number_format($payment_amount, 2) . "<br>" .
+                               "Status: Awaiting admin approval<br>" .
+                               "You will be contacted at {$contact_number} for confirmation.",
+                    'booking_id' => $booking_id
+                ];
+            } else {
+                throw new Exception("Failed to insert booking");
+            }
+            
+        } catch (Exception $e) {
+            $booking_result = [
+                'type' => 'error',
+                'message' => 'Booking failed: ' . $e->getMessage()
+            ];
+        }
+    } catch (Exception $e) {
+        $booking_result = [
+            'type' => 'error',
+            'message' => 'Error: ' . $e->getMessage()
+        ];
+    }
+}
+
+// Get user information
 $user_name = $_SESSION['username'] ?? 'User';
 
 // Get real data from database
@@ -33,6 +178,9 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Apple SF Pro Font Import */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
         :root {
             --accent-color: #FFD700;
             --font-size: 14px;
@@ -42,6 +190,10 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             --bg-secondary: #2a2a2a;
             --text-primary: #ffffff;
             --text-secondary: #cccccc;
+            
+            /* Apple Typography Variables */
+            --sf-pro-display: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+            --sf-pro-text: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
         }
 
         * {
@@ -52,11 +204,16 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: var(--sf-pro-text);
             background: var(--bg-primary);
             color: var(--text-primary);
-            line-height: 1.6;
+            line-height: 1.47059;
             font-size: var(--font-size);
+            font-weight: 400;
+            letter-spacing: -0.003em;
+            font-synthesis: none;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         /* Compact mode styles */
@@ -89,16 +246,90 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             min-height: 100vh;
         }
 
-        /* Sidebar - Simplified */
+        /* Sidebar - Dynamic Auto-Hide */
         .sidebar {
             width: 260px;
-            background: #1a1a1a;
-            border-right: 1px solid #333;
+            background: rgba(26, 26, 26, 0.95);
+            border-right: 1px solid rgba(51, 51, 51, 0.8);
             position: fixed;
-            left: 0;
+            left: -200px; /* Hide by default, showing only 60px */
             top: 0;
             height: 100vh;
             overflow-y: auto;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            backdrop-filter: blur(20px);
+            z-index: 1000;
+        }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            right: -20px;
+            top: 0;
+            width: 20px;
+            height: 100%;
+            background: transparent;
+            z-index: -1;
+        }
+
+        .sidebar:hover,
+        .sidebar.show {
+            left: 0;
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Hover trigger area */
+        .sidebar-trigger {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 20px;
+            height: 100vh;
+            z-index: 999;
+            background: transparent;
+        }
+
+        /* Collapsed sidebar indicator */
+        .sidebar-collapsed-indicator {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar:hover .sidebar-collapsed-indicator {
+            opacity: 0;
+        }
+
+        .collapsed-dot {
+            width: 6px;
+            height: 6px;
+            background: #FFD700;
+            border-radius: 50%;
+            opacity: 0.7;
+            animation: breathe 2s ease-in-out infinite;
+        }
+
+        .collapsed-dot:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+
+        .collapsed-dot:nth-child(3) {
+            animation-delay: 0.6s;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
         }
 
         .sidebar-header {
@@ -162,11 +393,17 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
         .nav-link.active::before { height: 60%; }
 
-        /* Main Content - Simplified */
+        /* Main Content - Dynamic for Collapsible Sidebar */
         .main-content {
             flex: 1;
-            margin-left: 260px;
+            margin-left: 60px; /* Start with collapsed sidebar space */
             padding: 0;
+            transition: margin-left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .sidebar:hover ~ .main-content,
+        .sidebar.show ~ .main-content {
+            margin-left: 260px;
         }
 
         /* Top Header Bar */
@@ -470,16 +707,30 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             }
             
             .sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
+                left: -100% !important; /* Override the dynamic behavior on mobile */
+                transform: translateX(0);
+                transition: left 0.3s ease;
+                backdrop-filter: blur(20px);
             }
             
             .sidebar.mobile-open {
-                transform: translateX(0);
+                left: 0 !important;
+            }
+            
+            .sidebar:hover {
+                left: -100% !important; /* Disable hover on mobile */
+            }
+            
+            .sidebar-trigger {
+                display: none; /* Hide trigger area on mobile */
+            }
+            
+            .sidebar-collapsed-indicator {
+                display: none; /* Hide indicator on mobile */
             }
             
             .main-content {
-                margin-left: 0;
+                margin-left: 0 !important; /* Always full width on mobile */
             }
         }
 
@@ -498,81 +749,508 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
 
         .services-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 60px;
+            margin: 80px 0 120px 0;
+            padding: 0 40px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .service-card {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             text-align: center;
         }
 
-        .service-icon {
-            font-size: 48px;
+        .service-card:hover {
+            transform: scale(1.02);
+        }
+
+        .service-card:hover .service-name {
             color: #FFD700;
-            margin-bottom: 15px;
+        }
+
+        .service-card:hover .service-icon {
+            transform: scale(1.1);
+        }
+
+        .service-icon {
+            font-size: 4.5rem;
+            margin-bottom: 40px;
+            opacity: 0.8;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            display: block;
+        }
+
+        .service-image {
+            width: 100%;
+            max-width: 200px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 12px;
+            opacity: 0.9;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            margin: 0 auto;
+            display: block;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .service-card:hover .service-image {
+            opacity: 1;
+            transform: scale(1.05);
+            box-shadow: 0 8px 30px rgba(255, 215, 0, 0.2);
         }
 
         .service-name {
-            font-size: 18px;
-            margin-bottom: 15px;
-            min-height: 50px;
+            font-size: 1.4rem;
+            margin: 0 0 20px 0;
+            color: #ffffff;
+            font-weight: 400;
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+            transition: color 0.3s ease;
+        }
+
+        .service-price-range {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 1rem;
+            font-weight: 400;
+            margin-bottom: 40px;
+            letter-spacing: 0.01em;
+        }
+
+        .service-card .btn-primary {
+            background: transparent;
+            color: #FFD700;
+            border: none;
+            padding: 0;
+            font-weight: 400;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            letter-spacing: 0.01em;
+        }
+
+        .service-card .btn-primary:hover {
+            color: #ffffff;
+        }
+
+        .category-title {
+            color: #ffffff;
+            font-size: 3.5rem;
+            margin: 120px 0 20px 0;
+            text-align: center;
+            font-weight: 200;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+        }
+
+        .category-subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 80px;
+            font-size: 1.3rem;
+            font-weight: 300;
+            letter-spacing: 0.01em;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.4;
+        }
+
+        .service-category {
+            margin-bottom: 160px;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 120px;
+            padding-top: 80px;
+        }
+
+        .page-title {
+            font-size: 5rem;
+            font-weight: 100;
+            color: #ffffff;
+            margin-bottom: 30px;
+            letter-spacing: -0.05em;
+            line-height: 1;
+        }
+
+        .page-subtitle {
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 300;
+            letter-spacing: 0.02em;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        /* ===== FEATURED SERVICES - APPLE STYLE ===== */
+        
+        #featured-services {
+            margin-bottom: 160px;
+        }
+
+        .featured-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 80px 60px 120px;
+            max-width: 1400px;
+            margin: 0 auto;
+            gap: 80px;
+        }
+
+        .featured-intro {
+            flex: 1;
+            max-width: 480px;
+        }
+
+        .featured-title {
+            font-size: 4rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 30px;
+            letter-spacing: -0.003em;
+            line-height: 1.05;
+        }
+
+        .featured-subtitle {
+            font-size: 1.3rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 40px;
+            line-height: 1.47059;
+            font-weight: 400;
+            letter-spacing: -0.003em;
+        }
+
+        .featured-links {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .featured-link {
+            color: #007AFF;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 400;
+            letter-spacing: -0.003em;
+            transition: color 0.2s ease;
+        }
+
+        .featured-link:hover {
+            color: #0051D5;
+        }
+
+        .featured-link span {
+            margin-left: 4px;
+        }
+
+        .featured-gallery {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+            height: 400px;
+            align-items: center;
+        }
+
+        .gallery-item {
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        .service-pricing {
-            display: flex;
-            justify-content: space-between;
-            margin: 15px 0;
-            background: #2a2a2a;
-            border-radius: 8px;
-            padding: 10px;
-        }
-
-        .price-option {
-            text-align: center;
-            flex: 1;
-        }
-
-        .vehicle-size {
-            display: block;
-            font-size: 12px;
-            color: #ccc;
-            margin-bottom: 5px;
-        }
-
-        .price {
-            display: block;
-            font-size: 16px;
-            color: #FFD700;
-            font-weight: bold;
-        }
-
-        .service-details {
-            text-align: left;
-            margin: 15px 0;
-            font-size: 13px;
-            line-height: 1.4;
-        }
-
-        .service-details p {
-            margin-bottom: 8px;
-        }
-
-        .btn-primary {
-            background: #FFD700;
-            color: #1a1a1a;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
+        .gallery-image {
             width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 16px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .placeholder-circle {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .placeholder-rect {
+            width: 100%;
+            height: 160px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+        }
+
+        .placeholder-square {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+        }
+
+        /* Featured Carousel */
+        .featured-carousel-section {
+            padding: 0 60px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .carousel-title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-align: center;
+            margin-bottom: 60px;
+            letter-spacing: -0.003em;
+        }
+
+        .carousel-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+        }
+
+        .carousel-track {
+            display: flex;
+            transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            gap: 40px;
+            padding: 40px;
+        }
+
+        .carousel-item {
+            flex: 0 0 480px;
+            opacity: 0.7;
+            transform: scale(0.9);
+            transition: all 0.6s ease;
+        }
+
+        .carousel-item.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .featured-service-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 28px;
+            padding: 35px;
+            text-align: center;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            min-height: 500px;
+        }
+
+        .featured-service-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-10px);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+        }
+
+        .featured-service-card:hover .service-featured-image {
+            transform: scale(1.05);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .card-image {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .service-featured-image {
+            width: 320px;
+            height: 320px;
+            object-fit: cover;
+            border-radius: 24px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
+        }
+
+        .service-featured-placeholder {
+            width: 320px;
+            height: 320px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .featured-emoji {
+            font-size: 4rem;
+        }
+
+        .color-options {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .color-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .color-dot.active {
+            border-color: #007AFF;
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+        }
+
+        .color-dot[data-color="default"] { background: #ffffff; }
+        .color-dot[data-color="premium"] { background: #FFD700; }
+        .color-dot[data-color="luxury"] { background: #FF6B35; }
+        .color-dot[data-color="elite"] { background: #8B5CF6; }
+
+        .card-content {
+            position: relative;
+        }
+
+        .service-badge-new {
+            position: absolute;
+            top: -10px;
+            right: 20px;
+            background: #FF3B30;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .service-featured-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 12px;
+            letter-spacing: -0.003em;
+            line-height: 1.3;
+        }
+
+        .service-featured-price {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 500;
+        }
+
+        .carousel-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            color: #ffffff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .carousel-nav:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .carousel-nav.prev {
+            left: 20px;
+        }
+
+        .carousel-nav.next {
+            right: 20px;
+        }
+
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 40px 0;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dot.active {
+            background: #007AFF;
+            transform: scale(1.2);
+        }
+
+        .shop-all-link {
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        .shop-all-link a {
+            color: #007AFF;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 400;
+            letter-spacing: -0.003em;
+            transition: color 0.2s ease;
+        }
+
+        .shop-all-link a:hover {
+            color: #0051D5;
+        }
+
+        .shop-all-link span {
+            margin-left: 4px;
+        }
+
+        /* Remove all other visual noise */
+        .content-section {
+            padding: 0;
+            margin: 0;
+        }
+
+        /* Ultra clean sidebar */
+        .sidebar {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 215, 0, 0.05);
+        }
+
+        .nav-link {
+            font-weight: 300;
+            font-size: 1.1rem;
+            letter-spacing: 0.01em;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 215, 0, 0.05);
+        }
+
+        .nav-link.active {
+            background: rgba(255, 215, 0, 0.08);
+            border-right: 2px solid #FFD700;
         }
 
         .btn-secondary {
@@ -591,8 +1269,18 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
     </button>
 
     <div class="dashboard">
+        <!-- Hover Trigger Area -->
+        <div class="sidebar-trigger" id="sidebarTrigger"></div>
+        
         <!-- Sidebar -->
         <nav class="sidebar" id="sidebar">
+            <!-- Collapsed State Indicator -->
+            <div class="sidebar-collapsed-indicator">
+                <div class="collapsed-dot"></div>
+                <div class="collapsed-dot"></div>
+                <div class="collapsed-dot"></div>
+            </div>
+            
             <div class="sidebar-header">
                 <a href="#" class="logo">
                     <i class="fas fa-car"></i> Ride Revive
@@ -804,6 +1492,119 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                     </div>
                 </section>
 
+                <!-- Featured Services Section - Apple Style -->
+                <section id="featured-services" class="content-section">
+                    <div class="featured-hero">
+                        <div class="featured-intro">
+                            <h2 class="featured-title">Meet your match.</h2>
+                            <p class="featured-subtitle">Pair your car with the perfect service,<br>ceramic protection or premium detailing in<br>fresh new levels of care and excellence.</p>
+                            <div class="featured-links">
+                                <a href="#services" class="featured-link">Shop All Services <span>›</span></a>
+                                <a href="#premium" class="featured-link">Shop Premium Packages <span>›</span></a>
+                            </div>
+                        </div>
+                        <div class="featured-gallery">
+                            <div class="gallery-item item-1">
+                                <img src="../assets/images/services/basic-exterior-care.jpg" alt="Basic Care" class="gallery-image">
+                            </div>
+                            <div class="gallery-item item-2">
+                                <img src="../assets/images/services/express-care-wax.jpg" alt="Express Wax" class="gallery-image">
+                            </div>
+                            <div class="gallery-item item-3">
+                                <div class="placeholder-circle"></div>
+                            </div>
+                            <div class="gallery-item item-4">
+                                <div class="placeholder-rect"></div>
+                            </div>
+                            <div class="gallery-item item-5">
+                                <div class="placeholder-square"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Featured Services Carousel -->
+                    <div class="featured-carousel-section">
+                        <h2 class="carousel-title">Featured Car Detailing Services</h2>
+                        <div class="carousel-container">
+                            <div class="carousel-track" id="featuredTrack">
+                                <?php 
+                                // Get featured services (Premium and most popular)
+                                $featured_services = [];
+                                foreach ($services as $service) {
+                                    if (in_array($service['service_name'], [
+                                        'Platinum Package (Full Interior + Exterior Detail)',
+                                        'Ceramic Coating (1-year Protection)',
+                                        'Full Exterior Detailing'
+                                    ])) {
+                                        $featured_services[] = $service;
+                                    }
+                                }
+                                
+                                foreach ($featured_services as $index => $service):
+                                    // Get service image
+                                    $service_name_clean = strtolower(str_replace([' ', '+', '(', ')'], ['-', '-', '-', ''], $service['service_name']));
+                                    $service_name_clean = preg_replace('/-+/', '-', $service_name_clean);
+                                    $service_name_clean = trim($service_name_clean, '-');
+                                    
+                                    $service_image = '';
+                                    $image_formats = ['jpg', 'png', 'webp'];
+                                    foreach ($image_formats as $format) {
+                                        if (file_exists(__DIR__ . "/../assets/images/services/{$service_name_clean}.{$format}")) {
+                                            $service_image = "../assets/images/services/{$service_name_clean}.{$format}";
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // Fallback to emoji if no image
+                                    $icon_emoji = '✨';
+                                    if (strpos($service['service_name'], 'Ceramic') !== false) $icon_emoji = '🛡️';
+                                    elseif (strpos($service['service_name'], 'Exterior') !== false) $icon_emoji = '🚗';
+                                    elseif (strpos($service['service_name'], 'Platinum') !== false) $icon_emoji = '💎';
+                                ?>
+                                <div class="carousel-item">
+                                    <div class="featured-service-card">
+                                        <div class="card-image">
+                                            <?php if ($service_image): ?>
+                                                <img src="<?php echo htmlspecialchars($service_image); ?>" 
+                                                     alt="<?php echo htmlspecialchars($service['service_name']); ?>" 
+                                                     class="service-featured-image">
+                                            <?php else: ?>
+                                                <div class="service-featured-placeholder">
+                                                    <span class="featured-emoji"><?php echo $icon_emoji; ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="color-options">
+                                                <div class="color-dot active" data-color="default"></div>
+                                                <div class="color-dot" data-color="premium"></div>
+                                                <div class="color-dot" data-color="luxury"></div>
+                                                <div class="color-dot" data-color="elite"></div>
+                                            </div>
+                                        </div>
+                                        <div class="card-content">
+                                            <?php if ($service['category'] == 'Premium Detailing'): ?>
+                                                <span class="service-badge-new">New</span>
+                                            <?php endif; ?>
+                                            <h3 class="service-featured-title"><?php echo htmlspecialchars($service['service_name']); ?></h3>
+                                            <p class="service-featured-price">₱<?php echo number_format($service['price_small']); ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <button class="carousel-nav prev" id="carouselPrev">‹</button>
+                            <button class="carousel-nav next" id="carouselNext">›</button>
+                        </div>
+                        <div class="carousel-dots">
+                            <span class="dot active" data-slide="0"></span>
+                            <span class="dot" data-slide="1"></span>
+                            <span class="dot" data-slide="2"></span>
+                        </div>
+                        <div class="shop-all-link">
+                            <a href="#services">Shop all car detailing services <span>›</span></a>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Services Section -->
                 <section id="services" class="content-section">
                     <div class="page-header">
@@ -812,59 +1613,96 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                     </div>
 
                     <?php 
+                    // Group services by category and reorganize order
                     $grouped_services = [];
                     foreach ($services as $service) {
                         $grouped_services[$service['category']][] = $service;
                     }
+                    
+                    // Define the desired order: Basic Package and Premium Detailing first, then Add-On Services
+                    $category_order = ['Basic Package', 'Premium Detailing', 'Add-On Service'];
+                    $ordered_services = [];
+                    
+                    foreach ($category_order as $category) {
+                        if (isset($grouped_services[$category])) {
+                            $ordered_services[$category] = $grouped_services[$category];
+                        }
+                    }
+                    
+                    // Add any remaining categories
+                    foreach ($grouped_services as $category => $services_list) {
+                        if (!in_array($category, $category_order)) {
+                            $ordered_services[$category] = $services_list;
+                        }
+                    }
                     ?>
 
-                    <?php foreach ($grouped_services as $category => $category_services): ?>
+                    <?php foreach ($ordered_services as $category => $category_services): ?>
                         <div class="service-category">
                             <h2 class="category-title"><?php echo htmlspecialchars($category); ?></h2>
+                            <?php if ($category == 'Basic Package'): ?>
+                                <p class="category-subtitle">Essential car care services for everyday maintenance</p>
+                            <?php elseif ($category == 'Premium Detailing'): ?>
+                                <p class="category-subtitle">Complete luxury detailing for the ultimate car care experience</p>
+                            <?php elseif ($category == 'Add-On Service'): ?>
+                                <p class="category-subtitle">Specialized services to enhance your vehicle's protection and appearance</p>
+                            <?php endif; ?>
+                            
                             <div class="services-grid">
                                 <?php foreach ($category_services as $service): ?>
-                                    <div class="service-card">
+                                    <div class="service-card" onclick="viewServiceDetails(<?php echo $service['service_id']; ?>)">
                                         <div class="service-icon">
                                             <?php
-                                            // Icon mapping based on service type
-                                            $icon = 'fas fa-car';
-                                            if (strpos($service['service_name'], 'Interior') !== false) $icon = 'fas fa-couch';
-                                            elseif (strpos($service['service_name'], 'Exterior') !== false) $icon = 'fas fa-spray-can';
-                                            elseif (strpos($service['service_name'], 'Platinum') !== false) $icon = 'fas fa-crown';
-                                            elseif (strpos($service['service_name'], 'Engine') !== false) $icon = 'fas fa-cogs';
-                                            elseif (strpos($service['service_name'], 'Headlight') !== false) $icon = 'fas fa-lightbulb';
-                                            elseif (strpos($service['service_name'], 'Glass') !== false) $icon = 'fas fa-window-maximize';
-                                            elseif (strpos($service['service_name'], 'Ceramic') !== false) $icon = 'fas fa-shield-alt';
+                                            // Service image mapping
+                                            $service_image = '';
+                                            $service_name_clean = strtolower(str_replace([' ', '+', '(', ')'], ['-', '-', '-', ''], $service['service_name']));
+                                            $service_name_clean = preg_replace('/-+/', '-', $service_name_clean); // Remove multiple hyphens
+                                            $service_name_clean = trim($service_name_clean, '-'); // Remove leading/trailing hyphens
+                                            
+                                            // Check if image exists for this service
+                                            $image_path = "../assets/images/services/{$service_name_clean}.jpg";
+                                            $image_path_png = "../assets/images/services/{$service_name_clean}.png";
+                                            $image_path_webp = "../assets/images/services/{$service_name_clean}.webp";
+                                            
+                                            if (file_exists(__DIR__ . "/../assets/images/services/{$service_name_clean}.jpg")) {
+                                                $service_image = $image_path;
+                                            } elseif (file_exists(__DIR__ . "/../assets/images/services/{$service_name_clean}.png")) {
+                                                $service_image = $image_path_png;
+                                            } elseif (file_exists(__DIR__ . "/../assets/images/services/{$service_name_clean}.webp")) {
+                                                $service_image = $image_path_webp;
+                                            }
+                                            
+                                            if ($service_image): ?>
+                                                <img src="<?php echo $service_image; ?>" alt="<?php echo htmlspecialchars($service['service_name']); ?>" class="service-image">
+                                            <?php else:
+                                                // Fallback to emoji if no image found
+                                                $icon_emoji = '🚗';
+                                                if (strpos($service['service_name'], 'Interior') !== false) $icon_emoji = '🪟';
+                                                elseif (strpos($service['service_name'], 'Exterior') !== false) $icon_emoji = '🚗';
+                                                elseif (strpos($service['service_name'], 'Full Detail') !== false || strpos($service['service_name'], 'Platinum') !== false) $icon_emoji = '✨';
+                                                elseif (strpos($service['service_name'], 'Engine') !== false) $icon_emoji = '🔧';
+                                                elseif (strpos($service['service_name'], 'Headlight') !== false) $icon_emoji = '💡';
+                                                elseif (strpos($service['service_name'], 'Glass') !== false) $icon_emoji = '💎';
+                                                elseif (strpos($service['service_name'], 'Ceramic') !== false) $icon_emoji = '🛡️';
+                                                elseif (strpos($service['service_name'], 'Tire') !== false) $icon_emoji = '🛞';
+                                                elseif (strpos($service['service_name'], 'Wax') !== false) $icon_emoji = '🌟';
+                                                elseif (strpos($service['service_name'], 'Odor') !== false) $icon_emoji = '🌬️';
+                                                elseif (strpos($service['service_name'], 'Pet Hair') !== false) $icon_emoji = '🐕';
+                                                elseif (strpos($service['service_name'], 'Upholstery') !== false) $icon_emoji = '🪑';
+                                                elseif (strpos($service['service_name'], 'Watermark') !== false) $icon_emoji = '💧';
+                                                
+                                                echo $icon_emoji;
+                                            endif;
                                             ?>
-                                            <i class="<?php echo $icon; ?>"></i>
                                         </div>
+                                        
                                         <h3 class="service-name"><?php echo htmlspecialchars($service['service_name']); ?></h3>
                                         
-                                        <div class="service-pricing">
-                                            <div class="price-option">
-                                                <span class="vehicle-size">Small</span>
-                                                <span class="price">₱<?php echo number_format($service['price_small'], 2); ?></span>
-                                            </div>
-                                            <div class="price-option">
-                                                <span class="vehicle-size">Medium</span>
-                                                <span class="price">₱<?php echo number_format($service['price_medium'], 2); ?></span>
-                                            </div>
-                                            <div class="price-option">
-                                                <span class="vehicle-size">Large</span>
-                                                <span class="price">₱<?php echo number_format($service['price_large'], 2); ?></span>
-                                            </div>
+                                        <div class="service-price-range">
+                                            ₱<?php echo number_format($service['price_small'], 0); ?> - ₱<?php echo number_format($service['price_large'], 0); ?>
                                         </div>
                                         
-                                        <div class="service-details">
-                                            <p><strong>Includes:</strong> <?php echo htmlspecialchars($service['included_items']); ?></p>
-                                            <?php if ($service['free_items']): ?>
-                                                <p><strong>Free:</strong> <?php echo htmlspecialchars($service['free_items']); ?></p>
-                                            <?php endif; ?>
-                                        </div>
-                                        
-                                        <button class="btn-primary" onclick="openBookingModal(<?php echo $service['service_id']; ?>, '<?php echo htmlspecialchars($service['service_name']); ?>')">
-                                            Book Now
-                                        </button>
+                                        <span class="btn-primary">Learn more</span>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -964,70 +1802,100 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
     <div id="bookingModal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Book Service</h2>
+                <h2><i class="fas fa-calendar-plus"></i> Advanced Booking System</h2>
                 <span class="close" onclick="closeBookingModal()">&times;</span>
             </div>
-            <form id="bookingForm" class="modal-body">
+            <form id="advancedBookingForm" class="modal-body" method="POST">
+                <input type="hidden" name="action" value="create_advanced_booking">
                 <input type="hidden" id="service_id" name="service_id">
                 
-                <div class="form-group">
-                    <label>Service:</label>
-                    <p id="selected_service_name"></p>
+                <!-- Booking Result Alert -->
+                <?php if ($booking_result): ?>
+                <div style="background: <?php echo $booking_result['type'] === 'success' ? '#d4edda' : '#f8d7da'; ?>; color: <?php echo $booking_result['type'] === 'success' ? '#155724' : '#721c24'; ?>; padding: 12px; border-radius: 6px; margin-bottom: 15px; border: 1px solid <?php echo $booking_result['type'] === 'success' ? '#c3e6cb' : '#f5c6cb'; ?>;">
+                    <strong><?php echo $booking_result['type'] === 'success' ? 'Success!' : 'Error!'; ?></strong>
+                    <?php echo htmlspecialchars($booking_result['message']); ?>
                 </div>
-                
-                <div class="form-group">
-                    <label for="vehicle_size">Vehicle Size:</label>
-                    <select id="vehicle_size" name="vehicle_size" required onchange="updatePrice()">
-                        <option value="">Select Vehicle Size</option>
-                        <option value="small">Small (Sedan, Hatchback)</option>
-                        <option value="medium">Medium (SUV, Crossover)</option>
-                        <option value="large">Large (Van, Truck, Large SUV)</option>
-                    </select>
-                    <div id="selected_price" style="font-size: 18px; color: #FFD700; font-weight: bold; margin-top: 10px;"></div>
+                <?php endif; ?>
+
+                <!-- Business Rules Info -->
+                <div class="booking-rules-card">
+                    <h6><i class="fas fa-shield-alt"></i> Advanced Booking Rules</h6>
+                    <div class="rules-grid">
+                        <div class="rule-item"><i class="fas fa-users"></i> Max 2 customers per day</div>
+                        <div class="rule-item"><i class="fas fa-clock"></i> Business hours: 8 AM - 6 PM</div>
+                        <div class="rule-item"><i class="fas fa-calendar-times"></i> No weekend service</div>
+                        <div class="rule-item"><i class="fas fa-calendar-alt"></i> 30-day advance limit</div>
+                        <div class="rule-item"><i class="fas fa-user-check"></i> Admin approval required</div>
+                        <div class="rule-item"><i class="fas fa-route"></i> Travel buffers enforced</div>
+                    </div>
                 </div>
-                
+
                 <div class="form-group">
-                    <label for="booking_date">Preferred Date:</label>
-                    <input type="date" id="booking_date" name="booking_date" required 
-                           min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>">
+                    <label for="selected_service_name">Selected Service:</label>
+                    <div id="selected_service_name" class="selected-service-display"></div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="booking_time">Preferred Time:</label>
-                    <select id="booking_time" name="booking_time" required>
-                        <option value="">Select Time</option>
-                        <option value="08:00">8:00 AM</option>
-                        <option value="09:00">9:00 AM</option>
-                        <option value="10:00">10:00 AM</option>
-                        <option value="11:00">11:00 AM</option>
-                        <option value="13:00">1:00 PM</option>
-                        <option value="14:00">2:00 PM</option>
-                        <option value="15:00">3:00 PM</option>
-                        <option value="16:00">4:00 PM</option>
-                    </select>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vehicle_size"><i class="fas fa-car"></i> Vehicle Size:</label>
+                        <select id="vehicle_size" name="vehicle_size" required class="form-control">
+                            <option value="">Select size...</option>
+                            <option value="small">Small (Sedan, Hatchback)</option>
+                            <option value="medium">Medium (SUV, Crossover)</option>
+                            <option value="large">Large (Truck, Van)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="booking_date"><i class="fas fa-calendar"></i> Booking Date:</label>
+                        <input type="date" id="booking_date" name="booking_date" required class="form-control"
+                               min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>"
+                               max="<?php echo date('Y-m-d', strtotime('+30 days')); ?>">
+                    </div>
                 </div>
-                
+
                 <div class="form-group">
-                    <label for="vehicle_details">Vehicle Details:</label>
-                    <input type="text" id="vehicle_details" name="vehicle_details" 
-                           placeholder="e.g., Toyota Camry 2020, White" required>
+                    <label><i class="fas fa-clock"></i> Available Time Slots:</label>
+                    <div id="timeSlots" class="time-slots-container">
+                        <p class="placeholder-text">Please select a date first to see available time slots</p>
+                    </div>
+                    <input type="hidden" id="booking_time" name="booking_time" required>
                 </div>
-                
+
                 <div class="form-group">
-                    <label for="special_requests">Special Requests (Optional):</label>
-                    <textarea id="special_requests" name="special_requests" rows="3"></textarea>
+                    <label for="vehicle_details"><i class="fas fa-car-side"></i> Vehicle Details:</label>
+                    <textarea id="vehicle_details" name="vehicle_details" rows="2" class="form-control"
+                              placeholder="Year, Make, Model, Color, License Plate (e.g., 2020 Toyota Camry, Blue, ABC123)"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="service_address"><i class="fas fa-map-marker-alt"></i> Service Address:</label>
+                    <textarea id="service_address" name="service_address" rows="2" class="form-control" required
+                              placeholder="Complete address where service will be performed (Street, City, Barangay, Landmarks)"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="contact_number"><i class="fas fa-phone"></i> Contact Number:</label>
+                    <input type="tel" id="contact_number" name="contact_number" class="form-control" required
+                           placeholder="Your contact number for service coordination">
+                </div>
+
+                <div class="form-group">
+                    <label for="special_requests"><i class="fas fa-comments"></i> Special Requests:</label>
+                    <textarea id="special_requests" name="special_requests" rows="2" class="form-control"
+                              placeholder="Any special instructions or areas of focus..."></textarea>
                 </div>
 
                 <!-- Payment Options -->
                 <div class="form-group">
-                    <label>Payment Option:</label>
+                    <label><i class="fas fa-credit-card"></i> Payment Option:</label>
                     <div class="payment-options">
-                        <div class="payment-option" onclick="selectPaymentOption('partial')">
-                            <input type="radio" id="payment_partial" name="payment_option" value="partial" required>
+                        <div class="payment-option">
+                            <input type="radio" id="payment_partial" name="payment_option" value="partial" checked required>
                             <label for="payment_partial" class="payment-card">
                                 <div class="payment-header">
                                     <i class="fas fa-credit-card"></i>
-                                    <span class="payment-title">Partial Payment</span>
+                                    <span class="payment-title">Partial Payment (50% Down)</span>
                                     <span class="payment-badge recommended">Recommended</span>
                                 </div>
                                 <div class="payment-details">
@@ -1042,7 +1910,7 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                             </label>
                         </div>
                         
-                        <div class="payment-option" onclick="selectPaymentOption('full')">
+                        <div class="payment-option">
                             <input type="radio" id="payment_full" name="payment_option" value="full">
                             <label for="payment_full" class="payment-card">
                                 <div class="payment-header">
@@ -1055,7 +1923,7 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                                         Pay <span id="full_amount">₱0.00</span> now
                                     </div>
                                     <div class="payment-convenience">
-                                        No money needed in person
+                                        No money needed on service day
                                     </div>
                                     <div class="payment-note">Complete payment online, hassle-free service</div>
                                 </div>
@@ -1063,12 +1931,24 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                         </div>
                     </div>
                 </div>
+
+                <!-- Availability Info -->
+                <div id="availabilityInfo" class="info-card availability-info" style="display: none;">
+                    <h6><i class="fas fa-info-circle"></i> Booking Availability</h6>
+                    <div id="availabilityDetails"></div>
+                </div>
+
+                <!-- Booking Summary -->
+                <div id="bookingSummary" class="info-card booking-summary" style="display: none;">
+                    <h6><i class="fas fa-clipboard-check"></i> Booking Summary</h6>
+                    <div id="summaryContent"></div>
+                </div>
             </form>
             
             <div class="form-actions">
                 <button type="button" class="btn-secondary" onclick="closeBookingModal()">Cancel</button>
-                <button type="submit" class="btn-primary" form="bookingForm">
-                    <span id="submit_text">Proceed to Payment</span>
+                <button type="submit" class="btn-primary" form="advancedBookingForm" id="submitAdvancedBooking" disabled onclick="console.log('Submit button clicked!'); alert('Submit button clicked!');">
+                    <i class="fas fa-calendar-check"></i> Create Booking
                 </button>
             </div>
         </div>
@@ -1083,102 +1963,404 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.7);
+            background-color: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.3s ease;
         }
 
         .modal-content {
-            background-color: #2a2a2a;
-            margin: 5% auto;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            margin: 3% auto;
             padding: 0;
             border: 1px solid #444;
-            border-radius: 8px;
+            border-radius: 16px;
             width: 90%;
-            max-width: 500px;
-            max-height: 80vh;
+            max-width: 550px;
+            max-height: 90vh;
             overflow-y: auto;
-            display: flex;
-            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            animation: slideIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-30px) scale(0.95); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
         }
 
         .modal-header {
-            background: #1a1a1a;
-            padding: 20px;
-            border-bottom: 1px solid #444;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-radius: 8px 8px 0 0;
-            flex-shrink: 0;
-        }
-
-        .modal-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            padding: 20px 25px;
+            border-radius: 16px 16px 0 0;
+            position: relative;
+            text-align: center;
         }
 
         .modal-header h2 {
             margin: 0;
-            color: #FFD700;
+            font-size: 1.4rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
 
         .close {
-            color: #aaa;
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #000;
             font-size: 28px;
-            font-weight: bold;
+            font-weight: 500;
             cursor: pointer;
+            transition: all 0.3s ease;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
         }
 
         .close:hover {
+            background: rgba(0,0,0,0.1);
+            transform: translateY(-50%) rotate(90deg);
+        }
+
+        /* Form Styles */
+        .modal-body {
+            padding: 25px;
+            color: var(--text-primary);
+        }
+
+        .booking-rules-card {
+            background: linear-gradient(135deg, #2c1810 0%, #3d2414 100%);
+            border: 1px solid #FFD700;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .booking-rules-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #FFD700, #FFA500, #FFD700);
+        }
+
+        .booking-rules-card h6 {
+            margin: 0 0 15px 0;
             color: #FFD700;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .rule-item {
+            color: #e0c068;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+        }
+
+        .rule-item i {
+            color: #FFD700;
+            width: 16px;
         }
 
         .form-group {
             margin-bottom: 20px;
-            padding: 0 20px;
         }
 
-        .form-group:first-of-type {
-            padding-top: 20px;
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }
 
         .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #fff;
-            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            color: #FFD700;
+            font-weight: 500;
+            font-size: 14px;
         }
 
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
+        .form-group label i {
+            color: #FFA500;
+        }
+
+        .selected-service-display {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 165, 0, 0.15) 100%);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 600;
+            color: #FFD700;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .form-control {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #444;
-            border-radius: 4px;
-            background: #333;
-            color: #fff;
+            padding: 12px 15px;
+            background: rgba(42, 42, 42, 0.8);
+            border: 1px solid #555;
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
         }
 
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            border-color: #FFD700;
+        .form-control:focus {
             outline: none;
+            border-color: #FFD700;
+            box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
+            background: rgba(42, 42, 42, 1);
+        }
+
+        .time-slots-container {
+            min-height: 80px;
+            padding: 15px;
+            border: 1px solid #555;
+            border-radius: 12px;
+            background: rgba(42, 42, 42, 0.5);
+            margin-top: 5px;
+        }
+
+        .placeholder-text {
+            color: #888;
+            font-style: italic;
+            margin: 0;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .time-slot {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border: 2px solid #2196f3;
+            border-radius: 10px;
+            padding: 10px 15px;
+            margin: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-block;
+            min-width: 100px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1976d2;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .time-slot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .time-slot:hover::before {
+            left: 100%;
+        }
+
+        .time-slot:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
+            border-color: #1976d2;
+        }
+
+        .time-slot.selected {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            border-color: #FF8F00;
+            color: #000;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4);
+        }
+
+        .info-card {
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            border: 1px solid;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .availability-info {
+            background: linear-gradient(135deg, #1a2332 0%, #243447 100%);
+            border-color: #4a90e2;
+        }
+
+        .availability-info h6 {
+            color: #4a90e2;
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+
+        .availability-info #availabilityDetails {
+            color: #b3d4fc;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .booking-summary {
+            background: linear-gradient(135deg, #1b4332 0%, #2d5a45 100%);
+            border-color: #52b788;
+        }
+
+        .booking-summary h6 {
+            color: #52b788;
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+
+        .booking-summary #summaryContent {
+            color: #d1e7dd;
+            font-size: 13px;
+            line-height: 1.6;
         }
 
         .form-actions {
-            padding: 20px;
+            padding: 20px 25px;
+            background: rgba(26, 26, 26, 0.8);
             border-top: 1px solid #444;
+            border-radius: 0 0 16px 16px;
             display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            flex-shrink: 0;
-            background: #2a2a2a;
-            border-radius: 0 0 8px 8px;
+            justify-content: space-between;
+            gap: 15px;
         }
 
-        /* Payment Options Styles */
+        .btn-secondary {
+            background: linear-gradient(135deg, #666 0%, #777 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            flex: 1;
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #777 0%, #888 100%);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            flex: 2;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:not(:disabled):hover {
+            background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: linear-gradient(135deg, #666 0%, #555 100%);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-primary:not(:disabled):hover::before {
+            left: 100%;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .modal-content {
+                width: 95%;
+                margin: 5% auto;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .rules-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-actions {
+                flex-direction: column;
+            }
+
+            .time-slot {
+                min-width: 90px;
+                font-size: 13px;
+            }
+        }
+
+        /* Custom Scrollbar */
+        .modal-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .modal-content::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #FFD700;
+            border-radius: 3px;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb:hover {
+            background: #FFA500;
+        }
+
+        /* Payment Options */
         .payment-options {
             display: flex;
             flex-direction: column;
@@ -1188,7 +2370,6 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
 
         .payment-option {
             position: relative;
-            cursor: pointer;
         }
 
         .payment-option input[type="radio"] {
@@ -1198,9 +2379,9 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         .payment-card {
             display: block;
             background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
-            border: 2px solid #444;
+            border: 2px solid #555;
             border-radius: 12px;
-            padding: 20px;
+            padding: 15px;
             cursor: pointer;
             transition: all 0.3s ease;
             position: relative;
@@ -1214,7 +2395,7 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
 
         .payment-option input[type="radio"]:checked + .payment-card {
             border-color: #FFD700;
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05));
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05));
             box-shadow: 0 8px 25px rgba(255, 215, 0, 0.3);
         }
 
@@ -1222,28 +2403,27 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
 
         .payment-header i {
             color: #FFD700;
-            font-size: 20px;
+            font-size: 18px;
         }
 
         .payment-title {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             color: white;
             flex: 1;
         }
 
         .payment-badge {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .payment-badge.recommended {
@@ -1257,66 +2437,33 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         .payment-details {
-            margin-left: 30px;
+            font-size: 12px;
         }
 
         .payment-amount {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
             color: #FFD700;
             margin-bottom: 5px;
         }
 
-        .payment-remaining {
-            font-size: 14px;
+        .payment-remaining, .payment-convenience {
             color: #ccc;
             margin-bottom: 5px;
         }
 
-        .payment-saving {
-            font-size: 14px;
-            color: #4CAF50;
-            margin-bottom: 5px;
-        }
-
         .payment-note {
-            font-size: 12px;
             color: #888;
             font-style: italic;
-        }
-
-        @media (max-width: 768px) {
-            .payment-options {
-                gap: 10px;
-            }
-            
-            .payment-card {
-                padding: 15px;
-            }
-            
-            .payment-details {
-                margin-left: 0;
-                margin-top: 10px;
-            }
-        }
-
-        #selected_service_name {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 5px 0;
-        }
-
-        #selected_service_price {
-            font-size: 20px;
-            color: #FFD700;
-            font-weight: bold;
-            margin: 5px 0;
         }
     </style>
 
     <script>
+        // Global variables for advanced booking
         let currentServiceId = null;
         let currentServiceData = null;
+        let selectedTimeSlot = null;
+        let selectedService = null;
 
         // Service data for pricing
         const serviceData = {
@@ -1330,7 +2477,9 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                     large: ' . $service['price_large'] . '
                 }';
             }
-            echo implode(',', $service_js_data);
+            if (!empty($service_js_data)) {
+                echo implode(',', $service_js_data);
+            }
             ?>
         };
 
@@ -1360,118 +2509,44 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             }
         }
 
-        // Booking modal functions
+        // Booking modal functions - Advanced System
         function openBookingModal(serviceId, serviceName) {
             currentServiceId = serviceId;
             currentServiceData = serviceData[serviceId];
-            
+
             document.getElementById('service_id').value = serviceId;
             document.getElementById('selected_service_name').textContent = serviceName;
             document.getElementById('bookingModal').style.display = 'block';
+
+            selectedService = {
+                id: serviceId,
+                name: serviceName,
+                price: currentServiceData?.small || 0
+            };
+
+            // Reset form and initialize pricing
+            resetAdvancedBookingForm();
             
-            // Reset form
-            document.getElementById('vehicle_size').value = '';
-            document.getElementById('selected_price').textContent = '';
-        }
-
-        function closeBookingModal() {
-            document.getElementById('bookingModal').style.display = 'none';
-            document.getElementById('bookingForm').reset();
-            document.getElementById('selected_price').textContent = '';
-        }
-
-        function updatePrice() {
-            const vehicleSize = document.getElementById('vehicle_size').value;
-            const priceDisplay = document.getElementById('selected_price');
-            
-            if (vehicleSize && currentServiceData) {
-                const price = currentServiceData[vehicleSize];
-                priceDisplay.textContent = 'Price: ₱' + price.toFixed(2);
-                
-                // Update payment amounts
-                updatePaymentAmounts(price);
-            } else {
-                priceDisplay.textContent = '';
-                clearPaymentAmounts();
-            }
-        }
-
-        function updatePaymentAmounts(totalPrice) {
-            const partialAmount = totalPrice * 0.5;
-            const remainingAmount = totalPrice * 0.5;
-            const fullAmount = totalPrice; // No discount, just full price
-            
-            document.getElementById('partial_amount').textContent = '₱' + partialAmount.toFixed(2);
-            document.getElementById('remaining_amount').textContent = '₱' + remainingAmount.toFixed(2);
-            document.getElementById('full_amount').textContent = '₱' + fullAmount.toFixed(2);
-        }
-
-        function clearPaymentAmounts() {
+            // Initialize payment amounts to 0
             document.getElementById('partial_amount').textContent = '₱0.00';
             document.getElementById('remaining_amount').textContent = '₱0.00';
             document.getElementById('full_amount').textContent = '₱0.00';
         }
 
-        function selectPaymentOption(option) {
-            const radio = document.getElementById('payment_' + option);
-            radio.checked = true;
-            
-            // Update submit button text
-            const submitText = document.getElementById('submit_text');
-            if (option === 'partial') {
-                submitText.textContent = 'Pay 50% Now (₱' + document.getElementById('partial_amount').textContent.replace('₱', '') + ')';
-            } else {
-                submitText.textContent = 'Pay Full Amount (₱' + document.getElementById('full_amount').textContent.replace('₱', '') + ')';
-            }
+        function closeBookingModal() {
+            document.getElementById('bookingModal').style.display = 'none';
+            resetAdvancedBookingForm();
         }
 
-        // Handle booking form submission
-        document.getElementById('bookingForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const paymentOption = document.querySelector('input[name="payment_option"]:checked');
-            
-            if (!paymentOption) {
-                alert('Please select a payment option.');
-                return;
-            }
-            
-            // Add payment information to form data
-            const vehicleSize = document.getElementById('vehicle_size').value;
-            const totalPrice = currentServiceData[vehicleSize];
-            let paymentAmount, paymentType;
-            
-            if (paymentOption.value === 'partial') {
-                paymentAmount = totalPrice * 0.5;
-                paymentType = 'partial';
-            } else {
-                paymentAmount = totalPrice; // Full amount, no discount
-                paymentType = 'full';
-            }
-            
-            formData.append('payment_type', paymentType);
-            formData.append('payment_amount', paymentAmount);
-            formData.append('total_amount', totalPrice);
-            
-            fetch('create_booking.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Redirect to enhanced payment page
-                    window.location.href = 'payment_enhanced.php?booking_id=' + data.booking_id;
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while creating your booking.');
-            });
-        });
+        // Reset advanced booking form
+        function resetAdvancedBookingForm() {
+            document.getElementById('advancedBookingForm').reset();
+            document.getElementById('timeSlots').innerHTML = '<p class="placeholder-text">Please select a date first to see available time slots</p>';
+            document.getElementById('availabilityInfo').style.display = 'none';
+            document.getElementById('bookingSummary').style.display = 'none';
+            selectedTimeSlot = null;
+            updateSubmitButton();
+        }
 
         // Toggle sidebar for mobile
         function toggleSidebar() {
@@ -1496,6 +2571,375 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                 if (!sidebar.contains(event.target) && !menuBtn.contains(event.target)) {
                     sidebar.classList.remove('mobile-open');
                 }
+            }
+        });
+
+        console.log('Dashboard loaded successfully!');
+
+        // Date change handler for advanced booking
+        document.getElementById('booking_date').addEventListener('change', function() {
+            const date = this.value;
+            if (date) {
+                loadAvailableTimeSlots(date);
+            }
+        });
+
+        // Vehicle size and form change handlers
+        document.getElementById('vehicle_size').addEventListener('change', function() {
+            updatePricing();
+            updateBookingSummary();
+        });
+        document.getElementById('vehicle_details').addEventListener('input', updateBookingSummary);
+        document.getElementById('service_address').addEventListener('input', updateBookingSummary);
+        document.getElementById('contact_number').addEventListener('input', updateBookingSummary);
+        document.getElementById('special_requests').addEventListener('input', updateBookingSummary);
+
+        // Payment option handlers
+        document.querySelectorAll('input[name="payment_option"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                updatePricing();
+                updateBookingSummary();
+            });
+        });
+
+        // Update pricing based on vehicle size and service
+        function updatePricing() {
+            const vehicleSize = document.getElementById('vehicle_size').value;
+            
+            if (vehicleSize && selectedService && currentServiceData) {
+                const basePrice = currentServiceData[vehicleSize];
+                
+                // Update payment amounts
+                const partialAmount = basePrice * 0.5;
+                const remainingAmount = basePrice * 0.5;
+                
+                document.getElementById('partial_amount').textContent = '₱' + partialAmount.toFixed(2);
+                document.getElementById('remaining_amount').textContent = '₱' + remainingAmount.toFixed(2);
+                document.getElementById('full_amount').textContent = '₱' + basePrice.toFixed(2);
+            }
+        }
+
+        // Load available time slots
+        async function loadAvailableTimeSlots(date) {
+            try {
+                const response = await fetch(`../api/get_available_slots.php?date=${date}`);
+                const data = await response.json();
+                
+                const timeSlotsContainer = document.getElementById('timeSlots');
+                const availabilityInfo = document.getElementById('availabilityInfo');
+                const availabilityDetails = document.getElementById('availabilityDetails');
+                
+                if (data.success && data.available_slots.length > 0) {
+                    // Show available slots
+                    timeSlotsContainer.innerHTML = '';
+                    data.available_slots.forEach(slot => {
+                        const slotBtn = document.createElement('div');
+                        slotBtn.className = 'time-slot';
+                        slotBtn.textContent = formatTime(slot.start_time);
+                        slotBtn.dataset.time = slot.start_time;
+                        slotBtn.addEventListener('click', () => selectTimeSlot(slotBtn));
+                        timeSlotsContainer.appendChild(slotBtn);
+                    });
+                    
+                    // Show availability info
+                    availabilityDetails.innerHTML = `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                            <div><strong>Available slots:</strong> ${data.available_slots.length}</div>
+                            <div><strong>Business hours:</strong> 8:00 AM - 6:00 PM</div>
+                        </div>
+                        <p style="margin-top: 10px; font-style: italic;">Maximum 2 bookings per day with travel buffer between appointments</p>
+                    `;
+                    availabilityInfo.style.display = 'block';
+                } else {
+                    // No slots available
+                    timeSlotsContainer.innerHTML = '<p class="placeholder-text">No available time slots for this date</p>';
+                    availabilityDetails.innerHTML = `
+                        <p style="color: #f57c00; margin-bottom: 10px;">${data.message || 'This date is fully booked or unavailable'}</p>
+                        <div style="margin-top: 10px;">
+                            <strong style="color: #4a90e2;">Possible reasons:</strong>
+                            <ul style="margin: 8px 0 0 20px; color: #b3d4fc;">
+                                <li>Maximum 2 bookings per day reached</li>
+                                <li>Weekend selected (weekends not available)</li>
+                                <li>Past date selected</li>
+                                <li>Beyond 30-day advance booking limit</li>
+                            </ul>
+                        </div>
+                    `;
+                    availabilityInfo.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading time slots:', error);
+                document.getElementById('timeSlots').innerHTML = '<p class="placeholder-text" style="color: #d32f2f;">Error loading time slots</p>';
+            }
+        }
+
+        // Select time slot
+        function selectTimeSlot(slotElement) {
+            // Remove selection from other slots
+            document.querySelectorAll('.time-slot').forEach(slot => {
+                slot.classList.remove('selected');
+            });
+            
+            // Select this slot
+            slotElement.classList.add('selected');
+            
+            selectedTimeSlot = slotElement.dataset.time;
+            document.getElementById('booking_time').value = selectedTimeSlot;
+            
+            updateBookingSummary();
+            updateSubmitButton();
+        }
+
+        // Update booking summary
+        function updateBookingSummary() {
+            const service = selectedService;
+            const vehicleSize = document.getElementById('vehicle_size').value;
+            const date = document.getElementById('booking_date').value;
+            const time = selectedTimeSlot;
+            const serviceAddress = document.getElementById('service_address').value;
+            const contactNumber = document.getElementById('contact_number').value;
+            const paymentOption = document.querySelector('input[name="payment_option"]:checked')?.value;
+            
+            if (service && vehicleSize && date && time) {
+                let totalAmount = 0;
+                let paymentAmount = 0;
+                
+                if (currentServiceData && currentServiceData[vehicleSize]) {
+                    totalAmount = currentServiceData[vehicleSize];
+                    paymentAmount = paymentOption === 'full' ? totalAmount : totalAmount * 0.5;
+                }
+                
+                const summaryContent = document.getElementById('summaryContent');
+                summaryContent.innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 13px;">
+                        <div>
+                            <strong>Service:</strong> ${service.name}<br>
+                            <strong>Vehicle Size:</strong> ${vehicleSize.charAt(0).toUpperCase() + vehicleSize.slice(1)}<br>
+                            <strong>Date & Time:</strong> ${formatDate(date)} at ${formatTime(time)}<br>
+                            <strong>Contact:</strong> ${contactNumber || 'Not provided'}<br>
+                        </div>
+                        <div>
+                            <strong>Total Amount:</strong> ₱${totalAmount.toFixed(2)}<br>
+                            <strong>Payment Option:</strong> ${paymentOption === 'full' ? 'Full Payment' : '50% Down Payment'}<br>
+                            <strong>Amount Due Now:</strong> <span style="color: #FFD700;">₱${paymentAmount.toFixed(2)}</span><br>
+                            <strong>Status:</strong> <span style="color: #f57c00;">Pending Admin Approval</span><br>
+                        </div>
+                    </div>
+                    ${serviceAddress ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #555;">
+                        <strong>Service Address:</strong><br>
+                        <span style="color: #d1e7dd;">${serviceAddress}</span>
+                    </div>` : ''}
+                `;
+                document.getElementById('bookingSummary').style.display = 'block';
+            }
+        }
+
+        // Update submit button state
+        function updateSubmitButton() {
+            const form = document.getElementById('advancedBookingForm');
+            const submitBtn = document.getElementById('submitAdvancedBooking');
+            const vehicleSize = document.getElementById('vehicle_size').value;
+            const serviceAddress = document.getElementById('service_address').value;
+            const contactNumber = document.getElementById('contact_number').value;
+            const paymentOption = document.querySelector('input[name="payment_option"]:checked');
+            
+            const isValid = form.checkValidity() && selectedTimeSlot && vehicleSize && 
+                           serviceAddress.trim() && contactNumber.trim() && paymentOption;
+            
+            // TEMPORARY: Always enable button for debugging
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-calendar-check"></i> DEBUG: Test Submission';
+            submitBtn.style.background = '#ff9800';
+        }
+
+        // Handle advanced booking form submission
+        document.getElementById('advancedBookingForm').addEventListener('submit', function(e) {
+            // Debug: Log all form data before submission
+            const formData = new FormData(this);
+            console.log('Form data being submitted:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key + ': ' + value);
+            }
+            
+            // TEMPORARY: Remove all validation to test form submission
+            console.log('Form submission allowed - bypassing validation for debugging');
+            
+            // Make sure the hidden booking_time field is set (if time selected)
+            if (selectedTimeSlot) {
+                document.getElementById('booking_time').value = selectedTimeSlot;
+            }
+            
+            // Let the form submit naturally (don't prevent default)
+        });
+
+        // Format time for display
+        function formatTime(time) {
+            return new Date('2000-01-01 ' + time).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        // Format date for display
+        function formatDate(date) {
+            return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+
+        // Form validation
+        document.getElementById('advancedBookingForm').addEventListener('input', updateSubmitButton);
+        
+        // Initialize submit button on page load
+        updateSubmitButton();
+
+        // Navigate to service details page
+        function viewServiceDetails(serviceId) {
+            window.location.href = `service_details.php?id=${serviceId}`;
+        }
+
+        // Featured Services Carousel Functionality
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.carousel-item');
+        const dots = document.querySelectorAll('.dot');
+        const track = document.getElementById('featuredTrack');
+
+        function updateCarousel() {
+            // Update transform
+            const translateX = currentSlide * -520; // 480px width + 40px gap
+            track.style.transform = `translateX(${translateX}px)`;
+
+            // Update active states
+            slides.forEach((slide, index) => {
+                slide.classList.toggle('active', index === currentSlide);
+            });
+
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+        }
+
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % slides.length;
+            updateCarousel();
+        }
+
+        function prevSlide() {
+            currentSlide = (currentSlide - 1 + slides.length) % slides.length;
+            updateCarousel();
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            updateCarousel();
+        }
+
+        // Event listeners for carousel
+        document.getElementById('carouselNext')?.addEventListener('click', nextSlide);
+        document.getElementById('carouselPrev')?.addEventListener('click', prevSlide);
+
+        dots.forEach((dot, index) => {
+            dot.addEventListener('click', () => goToSlide(index));
+        });
+
+        // Auto-play carousel
+        setInterval(nextSlide, 5000);
+
+        // Initialize carousel
+        updateCarousel();
+
+        // Color options functionality
+        document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('click', function() {
+                const card = this.closest('.featured-service-card');
+                card.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Dynamic Sidebar Auto-Hide Functionality
+        const sidebar = document.getElementById('sidebar');
+        const sidebarTrigger = document.getElementById('sidebarTrigger');
+        const mainContent = document.querySelector('.main-content');
+        let sidebarTimeout;
+        let isMouseOverSidebar = false;
+        let isMouseOverTrigger = false;
+
+        function showSidebar() {
+            clearTimeout(sidebarTimeout);
+            sidebar.classList.add('show');
+            isMouseOverSidebar = true;
+        }
+
+        function hideSidebar() {
+            if (!isMouseOverSidebar && !isMouseOverTrigger) {
+                sidebar.classList.remove('show');
+            }
+        }
+
+        function scheduleSidebarHide() {
+            sidebarTimeout = setTimeout(() => {
+                if (!isMouseOverSidebar && !isMouseOverTrigger) {
+                    hideSidebar();
+                }
+            }, 300); // 300ms delay before hiding
+        }
+
+        // Trigger area events
+        sidebarTrigger.addEventListener('mouseenter', () => {
+            isMouseOverTrigger = true;
+            showSidebar();
+        });
+
+        sidebarTrigger.addEventListener('mouseleave', () => {
+            isMouseOverTrigger = false;
+            scheduleSidebarHide();
+        });
+
+        // Sidebar events
+        sidebar.addEventListener('mouseenter', () => {
+            isMouseOverSidebar = true;
+            clearTimeout(sidebarTimeout);
+        });
+
+        sidebar.addEventListener('mouseleave', () => {
+            isMouseOverSidebar = false;
+            scheduleSidebarHide();
+        });
+
+        // Optional: Show sidebar when hovering near the left edge of the screen
+        document.addEventListener('mousemove', (e) => {
+            if (e.clientX <= 30 && !sidebar.classList.contains('show')) {
+                isMouseOverTrigger = true;
+                showSidebar();
+            } else if (e.clientX > 280 && sidebar.classList.contains('show') && !isMouseOverSidebar) {
+                isMouseOverTrigger = false;
+                scheduleSidebarHide();
+            }
+        });
+
+        // Prevent sidebar from hiding when clicking on navigation links
+        sidebar.addEventListener('click', (e) => {
+            if (e.target.classList.contains('nav-link')) {
+                // Keep sidebar open for a moment after clicking a link
+                clearTimeout(sidebarTimeout);
+                setTimeout(() => {
+                    if (!isMouseOverSidebar) {
+                        hideSidebar();
+                    }
+                }, 1000);
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 768) {
+                // On mobile, revert to normal behavior
+                sidebar.classList.remove('show');
             }
         });
 

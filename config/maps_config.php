@@ -17,9 +17,9 @@ define('GOOGLE_MAPS_API_KEY', 'YOUR_GOOGLE_MAPS_API_KEY');
 // Alternative: You can also set this as an environment variable
 // define('GOOGLE_MAPS_API_KEY', $_ENV['GOOGLE_MAPS_API_KEY'] ?? 'YOUR_GOOGLE_MAPS_API_KEY');
 
-// Default map center (change to your preferred location)
-define('DEFAULT_MAP_LAT', 14.5995);  // Manila, Philippines latitude
-define('DEFAULT_MAP_LNG', 120.9842); // Manila, Philippines longitude
+// Default map center (Cavite Civic Center coordinates)
+define('DEFAULT_MAP_LAT', 14.4791);  // Cavite Civic Center latitude
+define('DEFAULT_MAP_LNG', 120.9099); // Cavite Civic Center longitude
 
 // Country restriction for address autocomplete (ISO 3166-1 Alpha-2 country code)
 define('MAP_COUNTRY_RESTRICTION', 'ph'); // 'ph' for Philippines, 'us' for USA, etc.

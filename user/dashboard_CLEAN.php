@@ -182,18 +182,52 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
         :root {
+            /* Apple-style Color Palette */
             --accent-color: #FFD700;
-            --font-size: 14px;
-            --border-radius: 8px;
-            --transition-duration: 0.3s;
-            --bg-primary: #1a1a1a;
-            --bg-secondary: #2a2a2a;
-            --text-primary: #ffffff;
-            --text-secondary: #cccccc;
+            --accent-hover: #FFC107;
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #1d1d1f;
+            --bg-modal: rgba(0, 0, 0, 0.85);
+            --text-primary: #f5f5f7;
+            --text-secondary: #a1a1a6;
+            --text-tertiary: #86868b;
+            --border-subtle: #2d2d2f;
+            --shadow-ambient: rgba(0, 0, 0, 0.7);
+            --shadow-glow: rgba(255, 215, 0, 0.15);
             
-            /* Apple Typography Variables */
-            --sf-pro-display: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-            --sf-pro-text: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+            /* Apple Typography */
+            --font-size: 17px;
+            --font-size-large: 28px;
+            --font-size-xlarge: 48px;
+            --font-weight-light: 300;
+            --font-weight-regular: 400;
+            --font-weight-medium: 500;
+            --font-weight-semibold: 600;
+            --font-weight-bold: 700;
+            --letter-spacing-tight: -0.022em;
+            --letter-spacing-normal: -0.003em;
+            --line-height-tight: 1.1;
+            --line-height-normal: 1.47059;
+            
+            /* Apple Spacing */
+            --border-radius: 12px;
+            --border-radius-large: 20px;
+            --spacing-xs: 8px;
+            --spacing-sm: 16px;
+            --spacing-md: 24px;
+            --spacing-lg: 32px;
+            --spacing-xl: 48px;
+            --spacing-xxl: 64px;
+            
+            /* Apple Transitions */
+            --transition-duration: 0.25s;
+            --transition-ease: cubic-bezier(0.4, 0.0, 0.2, 1);
+            --transition-bounce: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+            /* Apple SF Pro Font Stack */
+            --sf-pro-text: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+            --sf-pro-display: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
         }
 
         * {
@@ -207,10 +241,10 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             font-family: var(--sf-pro-text);
             background: var(--bg-primary);
             color: var(--text-primary);
-            line-height: 1.47059;
+            line-height: var(--line-height-normal);
             font-size: var(--font-size);
-            font-weight: 400;
-            letter-spacing: -0.003em;
+            font-weight: var(--font-weight-regular);
+            letter-spacing: var(--letter-spacing-normal);
             font-synthesis: none;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
@@ -333,8 +367,8 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         .sidebar-header {
-            padding: 20px;
-            border-bottom: 1px solid #333;
+            padding: var(--spacing-lg);
+            border-bottom: 1px solid var(--border-subtle);
             text-align: center;
         }
 
@@ -398,7 +432,8 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             flex: 1;
             margin-left: 60px; /* Start with collapsed sidebar space */
             padding: 0;
-            transition: margin-left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transition: margin-left var(--transition-duration) var(--transition-bounce);
+            background: var(--bg-primary);
         }
 
         .sidebar:hover ~ .main-content,
@@ -544,8 +579,12 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         .page-title {
-            font-size: 24px;
-            margin-bottom: 5px;
+            font-size: var(--font-size-xlarge);
+            font-weight: var(--font-weight-bold);
+            letter-spacing: var(--letter-spacing-tight);
+            line-height: var(--line-height-tight);
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-sm);
         }
 
         .page-subtitle {
@@ -759,17 +798,21 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         .service-card {
-            background: transparent;
-            border: none;
-            border-radius: 0;
-            padding: 0;
+            background: linear-gradient(135deg, var(--bg-card), rgba(255, 215, 0, 0.05));
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--border-radius-large);
+            padding: var(--spacing-xl);
             cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transition: all var(--transition-duration) var(--transition-ease);
             text-align: center;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         .service-card:hover {
-            transform: scale(1.02);
+            transform: translateY(-8px);
+            border-color: var(--accent-color);
+            box-shadow: 0 20px 40px var(--shadow-glow);
         }
 
         .service-card:hover .service-name {
@@ -1043,20 +1086,22 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
         }
 
         .featured-service-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 28px;
-            padding: 35px;
+            background: linear-gradient(135deg, var(--bg-card), rgba(255, 215, 0, 0.08));
+            border-radius: var(--border-radius-large);
+            padding: var(--spacing-xl);
             text-align: center;
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            transition: all var(--transition-duration) var(--transition-ease);
             min-height: 500px;
         }
 
         .featured-service-card:hover {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-10px);
-            box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+            background: linear-gradient(135deg, var(--bg-card), rgba(255, 215, 0, 0.12));
+            transform: translateY(-12px);
+            border-color: var(--accent-color);
+            box-shadow: 0 25px 50px var(--shadow-glow);
         }
 
         .featured-service-card:hover .service-featured-image {
@@ -1261,6 +1306,30 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
             border-radius: 8px;
             cursor: pointer;
         }
+
+        /* Apple-style Mobile Menu Button */
+        .mobile-menu-btn {
+            position: fixed;
+            top: var(--spacing-sm);
+            left: var(--spacing-sm);
+            z-index: 1001;
+            background: var(--bg-card);
+            color: var(--accent-color);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--border-radius);
+            padding: var(--spacing-sm);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            cursor: pointer;
+            transition: all var(--transition-duration) var(--transition-ease);
+        }
+
+        .mobile-menu-btn:hover {
+            background: var(--accent-color);
+            color: var(--bg-primary);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px var(--shadow-glow);
+        }
     </style>
 </head>
 <body>
@@ -1294,19 +1363,19 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                     <i class="fas fa-calendar-alt"></i> My Bookings
                 </a>
                 <a href="#" class="nav-link" onclick="showSection('services', this)">
-                    <i class="fas fa-car-wash"></i> Services
+                    <i class="fas fa-car-wash"></i> Book a Service
                 </a>
-                <a href="booking_guide.php" class="nav-link" target="_blank">
-                    <i class="fas fa-map-marked-alt"></i> Booking Guide
-                </a>
-                <a href="#" class="nav-link" onclick="showSection('finances', this)">
-                    <i class="fas fa-chart-line"></i> Finances
+                <a href="#" class="nav-link" onclick="showSection('payments', this)">
+                    <i class="fas fa-credit-card"></i> Payments / Transactions
                 </a>
                 <a href="#" class="nav-link" onclick="showSection('reviews', this)" data-section="reviews">
                     <i class="fas fa-star"></i> Reviews
                 </a>
                 <a href="#" class="nav-link" onclick="showSection('notifications', this)">
                     <i class="fas fa-bell"></i> Notifications
+                </a>
+                <a href="booking_guide.php" class="nav-link" target="_blank">
+                    <i class="fas fa-map-marked-alt"></i> Booking Guide
                 </a>
             </div>
             
@@ -1315,8 +1384,11 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                 <a href="#" class="nav-link" onclick="showSection('settings', this)">
                     <i class="fas fa-cogs"></i> Settings
                 </a>
+                <a href="#" class="nav-link" onclick="showSection('help', this)">
+                    <i class="fas fa-question-circle"></i> Help / Support
+                </a>
                 <a href="../auth/logout.php" class="nav-link">
-                    <i class="fas fa-sign-out-alt"></i> Logout
+                    <i class="fas fa-sign-out-alt"></i> Log Out
                 </a>
             </div>
         </nav>
@@ -1438,6 +1510,20 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                                 <i class="fas fa-calendar-alt"></i>
                                 <h3>No bookings yet</h3>
                                 <p>Start by booking your first service!</p>
+                                <button onclick="showSection('services', this)" style="
+                                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    color: white;
+                                    border: none;
+                                    padding: 12px 24px;
+                                    border-radius: 8px;
+                                    font-weight: 600;
+                                    cursor: pointer;
+                                    margin-top: 10px;
+                                    transition: all 0.3s ease;
+                                " onmouseover="this.style.transform='translateY(-2px)'" 
+                                   onmouseout="this.style.transform='translateY(0)'">
+                                    <i class="fas fa-plus"></i> Book Your First Service
+                                </button>
                             </div>
                         <?php else: ?>
                             <?php foreach ($user_bookings as $booking): ?>
@@ -1586,6 +1672,43 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                                             <?php endif; ?>
                                             <h3 class="service-featured-title"><?php echo htmlspecialchars($service['service_name']); ?></h3>
                                             <p class="service-featured-price">₱<?php echo number_format($service['price_small']); ?></p>
+                                            
+                                            <div class="featured-actions" style="margin-top: 15px; display: flex; gap: 8px;">
+                                                <button onclick="viewServiceDetails(<?php echo $service['service_id']; ?>)" 
+                                                        style="
+                                                            flex: 1;
+                                                            background: rgba(255, 255, 255, 0.08);
+                                                            color: rgba(255, 255, 255, 0.8);
+                                                            border: 1px solid rgba(255, 255, 255, 0.15);
+                                                            padding: 8px 12px;
+                                                            border-radius: 10px;
+                                                            cursor: pointer;
+                                                            font-size: 12px;
+                                                            font-weight: 500;
+                                                            transition: all 0.2s ease;
+                                                            backdrop-filter: blur(8px);
+                                                        " onmouseover="this.style.background='rgba(255, 255, 255, 0.12)'; this.style.color='rgba(255, 255, 255, 1)';"
+                                                           onmouseout="this.style.background='rgba(255, 255, 255, 0.08)'; this.style.color='rgba(255, 255, 255, 0.8)';">
+                                                    Details
+                                                </button>
+                                                <button onclick="startBooking(<?php echo $service['service_id']; ?>)" 
+                                                        style="
+                                                            flex: 1;
+                                                            background: #007AFF;
+                                                            color: white;
+                                                            border: none;
+                                                            padding: 8px 12px;
+                                                            border-radius: 10px;
+                                                            cursor: pointer;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                            transition: all 0.2s ease;
+                                                            box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3);
+                                                        " onmouseover="this.style.background='#0051D5'; this.style.transform='translateY(-0.5px)'; this.style.boxShadow='0 2px 6px rgba(0, 122, 255, 0.4)';"
+                                                           onmouseout="this.style.background='#007AFF'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 4px rgba(0, 122, 255, 0.3)';">
+                                                    Book
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1650,7 +1773,7 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                             
                             <div class="services-grid">
                                 <?php foreach ($category_services as $service): ?>
-                                    <div class="service-card" onclick="viewServiceDetails(<?php echo $service['service_id']; ?>)">
+                                    <div class="service-card">
                                         <div class="service-icon">
                                             <?php
                                             // Service image mapping
@@ -1702,7 +1825,42 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
                                             ₱<?php echo number_format($service['price_small'], 0); ?> - ₱<?php echo number_format($service['price_large'], 0); ?>
                                         </div>
                                         
-                                        <span class="btn-primary">Learn more</span>
+                                        <div class="service-actions" style="margin-top: 15px; display: flex; gap: 10px;">
+                                            <button onclick="viewServiceDetails(<?php echo $service['service_id']; ?>)" 
+                                                    class="btn-secondary" style="
+                                                        flex: 1;
+                                                        background: rgba(255, 255, 255, 0.1);
+                                                        color: #ffffff;
+                                                        border: 1px solid rgba(255, 255, 255, 0.2);
+                                                        padding: 10px 16px;
+                                                        border-radius: 12px;
+                                                        cursor: pointer;
+                                                        font-size: 14px;
+                                                        font-weight: 500;
+                                                        transition: all 0.2s ease;
+                                                        backdrop-filter: blur(10px);
+                                                    " onmouseover="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.borderColor='rgba(255, 255, 255, 0.3)';"
+                                                       onmouseout="this.style.background='rgba(255, 255, 255, 0.1)'; this.style.borderColor='rgba(255, 255, 255, 0.2)';">
+                                                Learn More
+                                            </button>
+                                            <button onclick="startBooking(<?php echo $service['service_id']; ?>)" 
+                                                    class="btn-primary" style="
+                                                        flex: 1;
+                                                        background: #007AFF;
+                                                        color: white;
+                                                        border: none;
+                                                        padding: 10px 16px;
+                                                        border-radius: 12px;
+                                                        cursor: pointer;
+                                                        font-size: 14px;
+                                                        font-weight: 600;
+                                                        transition: all 0.2s ease;
+                                                        box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+                                                    " onmouseover="this.style.background='#0051D5'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(0, 122, 255, 0.4)';"
+                                                       onmouseout="this.style.background='#007AFF'; this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0, 122, 255, 0.3)';">
+                                                Book Now
+                                            </button>
+                                        </div>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -2799,7 +2957,13 @@ $notifications = $carDB->getUserNotifications($user_id, 10);
 
         // Navigate to service details page
         function viewServiceDetails(serviceId) {
+            // Show service details modal or redirect to service details page
             window.location.href = `service_details.php?id=${serviceId}`;
+        }
+        
+        // Start booking flow - goes to professional 9-step booking
+        function startBooking(serviceId) {
+            window.location.href = `booking/step1_service_selection.php?service_id=${serviceId}`;
         }
 
         // Featured Services Carousel Functionality

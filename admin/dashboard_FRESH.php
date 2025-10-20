@@ -750,10 +750,13 @@ $today_revenue = $admin_stats['today_revenue'] ?? 0;
                                 <thead>
                                     <tr>
                                         <th>ID</th>
+                                        <th>Reference</th>
                                         <th>Customer</th>
                                         <th>Service</th>
                                         <th>Date</th>
                                         <th>Amount</th>
+                                        <th>Payment Method</th>
+                                        <th>Payment Status</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
@@ -761,10 +764,13 @@ $today_revenue = $admin_stats['today_revenue'] ?? 0;
                                     <?php foreach ($all_bookings as $booking): ?>
                                         <tr data-status="<?php echo $booking['status']; ?>">
                                             <td>#<?php echo $booking['id']; ?></td>
+                                            <td><?php echo htmlspecialchars($booking['booking_reference'] ?? ''); ?></td>
                                             <td><?php echo htmlspecialchars($booking['customer_name']); ?></td>
                                             <td><?php echo htmlspecialchars($booking['service_name']); ?></td>
                                             <td><?php echo date('M d, Y', strtotime($booking['booking_date'])); ?></td>
                                             <td class="amount">₱<?php echo number_format($booking['total_amount'], 2); ?></td>
+                                            <td><?php echo htmlspecialchars($booking['payment_method'] ?? ''); ?></td>
+                                            <td><?php echo htmlspecialchars($booking['payment_status'] ?? ''); ?></td>
                                             <td>
                                                 <span class="status-badge status-<?php echo $booking['status']; ?>">
                                                     <?php echo ucfirst($booking['status']); ?>
@@ -935,7 +941,69 @@ $today_revenue = $admin_stats['today_revenue'] ?? 0;
         }
 
         function viewBooking(bookingId) {
-            alert('Booking details modal for #' + bookingId + ' - Coming soon!');
+            // Fetch booking details from backend
+            fetch('get_booking_details.php?id=' + bookingId)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification('Error: ' + data.error, 'error');
+                        return;
+                    }
+                    // Build modal content
+                    let html = `<div style='padding:20px;'>`;
+                    html += `<h2>Booking Reference: <span style='color:#FFD700;'>${data.booking_reference}</span></h2>`;
+                    html += `<hr>`;
+                    html += `<h4>Customer Info</h4>`;
+                    html += `<div><b>Name:</b> ${data.customer_name || ''}</div>`;
+                    html += `<div><b>Email:</b> ${data.customer_email || ''}</div>`;
+                    html += `<div><b>Phone:</b> ${data.customer_phone || ''}</div>`;
+                    html += `<hr>`;
+                    html += `<h4>Service Details</h4>`;
+                    html += `<div><b>Service:</b> ${data.service_name || ''}</div>`;
+                    html += `<div><b>Category:</b> ${data.category || ''}</div>`;
+                    html += `<div><b>Vehicle Size:</b> ${data.vehicle_size || ''}</div>`;
+                    html += `<div><b>Add-ons:</b> ${(data.addons && data.addons.length) ? data.addons.map(a=>a.service_name).join(', ') : 'None'}</div>`;
+                    html += `<div><b>Date:</b> ${data.booking_date || ''}</div>`;
+                    html += `<div><b>Time:</b> ${data.booking_time || ''}</div>`;
+                    html += `<div><b>Address:</b> ${data.service_address || ''}</div>`;
+                    html += `<div><b>Landmark:</b> ${data.landmark_instructions || ''}</div>`;
+                    html += `<hr>`;
+                    html += `<h4>Payment</h4>`;
+                    html += `<div><b>Payment Method:</b> ${data.payment_method || ''}</div>`;
+                    html += `<div><b>Payment Status:</b> ${data.payment_status || ''}</div>`;
+                    html += `<div><b>Total Amount:</b> ₱${Number(data.total_amount).toLocaleString(undefined, {minimumFractionDigits:2})}</div>`;
+                    if (data.payment) {
+                        html += `<div><b>Deposit Amount:</b> ₱${Number(data.payment.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</div>`;
+                        html += `<div><b>Payment Type:</b> ${data.payment.payment_type || ''}</div>`;
+                        html += `<div><b>Transaction ID:</b> ${data.payment.transaction_id || ''}</div>`;
+                    }
+                    html += `<hr>`;
+                    html += `<div><b>Status:</b> <span style='color:#FFD700;'>${data.status || ''}</span></div>`;
+                    html += `</div>`;
+                    showModal(html, 'Booking Details');
+                })
+                .catch(err => {
+                    showNotification('Failed to fetch booking details', 'error');
+                });
+        }
+
+        // Modal utility
+        function showModal(content, title) {
+            let modal = document.getElementById('customModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'customModal';
+                modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;';
+                modal.innerHTML = `<div id='modalInner' style='background:#222;padding:30px 30px 20px 30px;border-radius:16px;max-width:500px;width:95vw;box-shadow:0 8px 32px #000;position:relative;'>
+                    <h2 style='margin-top:0;color:#FFD700;'>${title||''}</h2>
+                    <div id='modalContent'></div>
+                    <button id='closeModalBtn' style='position:absolute;top:10px;right:10px;background:#FFD700;color:#222;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;'>×</button>
+                </div>`;
+                document.body.appendChild(modal);
+                document.getElementById('closeModalBtn').onclick = () => modal.remove();
+            }
+            document.getElementById('modalContent').innerHTML = content;
+            modal.style.display = 'flex';
         }
 
         function filterBookings(status) {

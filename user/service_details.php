@@ -461,7 +461,7 @@ elseif (strpos($service['service_name'], 'Watermark') !== false) $icon_emoji = '
                     <p><strong>Duration:</strong> 2-4 hours depending on service</p>
                 </div>
 
-                <a href="create_booking_wizard.php?service_id=<?php echo $service['service_id']; ?>" class="cta-button">
+                <a href="booking/step1_service_selection.php?service_id=<?php echo $service['service_id']; ?>&size=medium" class="cta-button" id="bookNowBtn">
                     Book Now
                 </a>
                 
@@ -553,8 +553,8 @@ elseif (strpos($service['service_name'], 'Watermark') !== false) $icon_emoji = '
             button.addEventListener('click', function() {
                 const serviceId = <?php echo $service['service_id']; ?>;
                 const size = this.dataset.size;
-                const bookingLink = document.querySelector('.cta-button');
-                bookingLink.href = `create_booking_wizard.php?service_id=${serviceId}&size=${size}`;
+                const bookingLink = document.getElementById('bookNowBtn');
+                bookingLink.href = `booking/step1_service_selection.php?service_id=${serviceId}&size=${size}`;
             });
         });
     </script>
